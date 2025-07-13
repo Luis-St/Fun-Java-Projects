@@ -1,0 +1,41 @@
+### Gradle ###
+/build/
+/.gradle/
+/**/build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+.gradletasknamecache
+gradle/wrapper/gradle-wrapper.properties
+.project
+.classpath
+
+### Java ###
+# Compiled class files
+*.class
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Virtual Machine crash logs
+hs_err_pid*
+replay_pid*
+
+### IntelliJ IDEA ###
+# User-specific files
+/.idea/
+*.iml
+*.iws
+*.ipr
+/.idea_modules/
+/out/
+/classes/
+
+# logs
+*.log
