@@ -4,8 +4,7 @@ plugins {
 	id("com.github.joschi.licenser")
 }
 
-group = "org.example"
-version = "unspecified"
+val nettyAll: String = "4.2.3.Final"
 
 repositories {
 	mavenCentral()
@@ -30,6 +29,8 @@ dependencies {
 	implementation("org.apache.logging.log4j:log4j-api:${rootProject.extra["log4jAPI"]}") // Logging
 	implementation("org.apache.logging.log4j:log4j-core:${rootProject.extra["log4jCore"]}") // Logging
 	implementation("org.apache.commons:commons-lang3:${rootProject.extra["apacheLang"]}") // Utility
+	// Netty
+	implementation("io.netty:netty-all:$nettyAll") // Networking
 	// Other
 	implementation("org.jetbrains:annotations:${rootProject.extra["jetBrainsAnnotations"]}") // Annotations
 	// Test
