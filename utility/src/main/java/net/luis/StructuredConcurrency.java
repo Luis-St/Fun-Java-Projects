@@ -32,7 +32,7 @@ import java.util.function.Supplier;
  *
  */
 
-@SuppressWarnings({ "ReturnOfNull", "ProhibitedExceptionThrown" })
+@SuppressWarnings({ "ProhibitedExceptionThrown" })
 public class StructuredConcurrency implements AutoCloseable {
 	
 	private final ExecutorService executor;
@@ -55,7 +55,7 @@ public class StructuredConcurrency implements AutoCloseable {
 		return this.executor.isShutdown() || this.executor.isTerminated();
 	}
 	
-	public @NotNull Supplier<?> fork(@NotNull Runnable action) {
+	public @NotNull Future<?> fork(@NotNull Runnable action) {
 		Objects.requireNonNull(action, "Runnable action must not be null");
 		if (this.isShutdown()) {
 			throw new IllegalStateException("Executor service is already shutdown");
@@ -66,7 +66,7 @@ public class StructuredConcurrency implements AutoCloseable {
 		
 		this.phaser.register();
 		
-		Future<?> future = this.executor.submit(() -> {
+		return this.executor.submit(() -> {
 			try {
 				action.run();
 			} catch (Throwable t) {
@@ -76,20 +76,9 @@ public class StructuredConcurrency implements AutoCloseable {
 				this.phaser.arriveAndDeregister();
 			}
 		});
-		
-		return () -> {
-			try {
-				return future.get();
-			} catch (InterruptedException e) {
-				throw new RuntimeException("Task was interrupted", e);
-			} catch (ExecutionException e) {
-				Utils.throwSneaky(e.getCause());
-				return null;
-			}
-		};
 	}
 	
-	public <T> @NotNull Supplier<T> fork(@NotNull Callable<T> action) {
+	public <T> @NotNull Future<T> fork(@NotNull Callable<T> action) {
 		Objects.requireNonNull(action, "Callable action must not be null");
 		if (this.isShutdown()) {
 			throw new IllegalStateException("Executor service is already shutdown");
@@ -100,7 +89,7 @@ public class StructuredConcurrency implements AutoCloseable {
 		
 		this.phaser.register();
 		
-		Future<T> future = this.executor.submit(() -> {
+		return this.executor.submit(() -> {
 			try {
 				return action.call();
 			} catch (Throwable t) {
@@ -110,17 +99,6 @@ public class StructuredConcurrency implements AutoCloseable {
 				this.phaser.arriveAndDeregister();
 			}
 		});
-		
-		return () -> {
-			try {
-				return future.get();
-			} catch (InterruptedException e) {
-				throw new RuntimeException("Task was interrupted", e);
-			} catch (ExecutionException e) {
-				Utils.throwSneaky(e.getCause());
-				return null;
-			}
-		};
 	}
 	
 	public void join() {
