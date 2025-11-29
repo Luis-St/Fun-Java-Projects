@@ -1,7 +1,19 @@
+import net.luis.lm.LineEnding
+import java.time.Year
+
+val lUtils: String by project
+val googleGuava: String by project
+val log4jAPI: String by project
+val log4jCore: String by project
+val apacheLang: String by project
+val jetBrainsAnnotations: String by project
+val junitJupiter: String by project
+val junitPlatformLauncher: String by project
+
 plugins {
 	id("java")
 	id("maven-publish")
-	id("com.github.joschi.licenser")
+	id("net.luis.lm")
 }
 
 group = "org.example"
@@ -16,9 +28,9 @@ repositories {
 
 dependencies {
 	// Own libraries
-	implementation("net.luis:LUtils:${rootProject.extra["lUtils"]}")
+	implementation("net.luis:LUtils:${lUtils}")
 	// Google
-	implementation("com.google.guava:guava:${rootProject.extra["googleGuava"]}") {  // Utility
+	implementation("com.google.guava:guava:${googleGuava}") {  // Utility
 		exclude(group = "org.checkerframework")
 		exclude(group = "com.google.code.findbugs")
 		exclude(group = "com.google.errorprone")
@@ -27,27 +39,36 @@ dependencies {
 		exclude(group = "com.google.guava", module = "listenablefuture")
 	}
 	// Apache
-	implementation("org.apache.logging.log4j:log4j-api:${rootProject.extra["log4jAPI"]}") // Logging
-	implementation("org.apache.logging.log4j:log4j-core:${rootProject.extra["log4jCore"]}") // Logging
-	implementation("org.apache.commons:commons-lang3:${rootProject.extra["apacheLang"]}") // Utility
+	implementation("org.apache.logging.log4j:log4j-api:${log4jAPI}") // Logging
+	implementation("org.apache.logging.log4j:log4j-core:${log4jCore}") // Logging
+	implementation("org.apache.commons:commons-lang3:${apacheLang}") // Utility
 	// Other
-	implementation("org.jetbrains:annotations:${rootProject.extra["jetBrainsAnnotations"]}") // Annotations
+	implementation("org.jetbrains:annotations:${jetBrainsAnnotations}") // Annotations
 	// Test
-	testImplementation("org.junit.jupiter:junit-jupiter:${rootProject.extra["junitJupiter"]}")
+	testImplementation("org.junit.jupiter:junit-jupiter:${junitJupiter}")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:${junitPlatformLauncher}")
 }
 
-tasks.test {
-	useJUnitPlatform()
+licenseManager {
+	header = "header.txt"
+	lineEnding = LineEnding.LF
+	spacingAfterHeader = 1
+	
+	variable("year", Year.now())
+	variable("author", "Luis Staudt")
+	variable("project", rootProject.name)
+	
+	sourceSets = listOf("main", "test")
+	
+	include("**/*.java")
 }
 
 tasks.named<JavaCompile>("compileJava") {
-	dependsOn("updateLicenses")
+	dependsOn(tasks.named("updateLicenses"))
 }
 
-license {
-	header = rootProject.file("header.txt")
-	include("**/*.java")
-	exclude("**/Main.java")
+tasks.named<Test>("test") {
+	useJUnitPlatform()
 }
 
 tasks.register<JavaExec>("run") {

@@ -1,5 +1,5 @@
 /*
- * LUtils
+ * Fun-Java-Projects
  * Copyright (C) 2025 Luis Staudt
  *
  * This program is free software: you can redistribute it and/or modify

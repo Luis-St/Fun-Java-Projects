@@ -1,3 +1,6 @@
+import net.luis.lm.LineEnding
+import java.time.Year
+
 val lUtils: String by project
 val googleGuava: String by project
 val log4jAPI: String by project
@@ -5,27 +8,12 @@ val log4jCore: String by project
 val apacheLang: String by project
 val jetBrainsAnnotations: String by project
 val junitJupiter: String by project
+val junitPlatformLauncher: String by project
 
 plugins {
 	id("java")
 	id("maven-publish")
-	id("com.github.joschi.licenser") version "0.6.1"
-}
-
-allprojects {
-	extra["lUtils"] = lUtils
-	extra["googleGuava"] = googleGuava
-	extra["log4jAPI"] = log4jAPI
-	extra["log4jCore"] = log4jCore
-	extra["apacheLang"] = apacheLang
-	extra["jetBrainsAnnotations"] = jetBrainsAnnotations
-	extra["junitJupiter"] = junitJupiter
-}
-
-subprojects {
-	apply(plugin = "java")
-	apply(plugin = "maven-publish")
-	apply(plugin = "com.github.joschi.licenser")
+	id("net.luis.lm")
 }
 
 repositories {
@@ -55,14 +43,24 @@ dependencies {
 	implementation("org.jetbrains:annotations:${jetBrainsAnnotations}") // Annotations
 	// Test
 	testImplementation("org.junit.jupiter:junit-jupiter:${junitJupiter}")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher:${junitPlatformLauncher}")
+}
+
+licenseManager {
+	header = "header.txt"
+	lineEnding = LineEnding.LF
+	spacingAfterHeader = 1
+	
+	variable("year", Year.now())
+	variable("author", "Luis Staudt")
+	variable("project", rootProject.name)
+	
+	sourceSets = listOf("main", "test")
+	
+	include("**/*.java")
+	exclude("**/Main.java")
 }
 
 tasks.named<JavaCompile>("compileJava") {
-	dependsOn("updateLicenses")
-}
-
-license {
-	header = file("header.txt")
-	include("**/*.java")
-	exclude("**/Main.java")
+	dependsOn(tasks.named("updateLicenses"))
 }
