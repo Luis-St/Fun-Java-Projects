@@ -89,14 +89,13 @@ public class Main {
 			Main::classifyToken
 		);
 		
-		String fileContent = Files.readString(Path.of("./src/main/java/net/luis/Main.java"));
+		String fileContent = Files.readString(Path.of("./src/main/java/net/luis/ComprehensiveSyntaxTest.java"));
 		List<Token> rawTokens = reader.readTokens(fileContent);
 		List<Token> parsedTokens = grammar.parse(rawTokens);
 		
 		LOGGER.info("Raw Tokens: {}", rawTokens.size());
 		LOGGER.info("Parsed Tokens: {}", parsedTokens.size());
 		LOGGER.info("Content:\n{}", parsedTokens.stream().map(Main::stringifyToken).collect(Collectors.joining()));
-		
 	}
 	
 	private static @NotNull Set<TokenDefinition> getTokenDefinitions() {
@@ -177,11 +176,17 @@ public class Main {
 		return new HashSet<>();
 	}
 	
-	// ToDO: Improve token stringification
-	//       Shadow tokens are not displayed correctly if they are inside a token group
 	private static @NotNull String stringifyToken(@NotNull Token token) {
 		if (token instanceof TokenGroup(List<Token> tokens)) {
-			return GREEN + token.value() + RESET;
+			StringBuilder sb = new StringBuilder();
+			for (Token childToken : tokens) {
+				if (childToken instanceof ShadowToken) {
+					sb.append(BG_GRAY).append(childToken.value()).append(RESET);
+				} else {
+					sb.append(GREEN).append(childToken.value()).append(RESET);
+				}
+			}
+			return sb.toString();
 		} else if (token instanceof ShadowToken) {
 			return BG_GRAY + token.value() + RESET;
 		}

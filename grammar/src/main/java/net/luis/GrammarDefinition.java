@@ -99,7 +99,7 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.value("package", false),
 			TokenRules.reference("FullQualifiedName"),
 			TokenRules.value(';', false)
-		), TokenActions.grouping());
+		), GroupingTokenAction.INSTANCE);
 		
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value("import", false),
@@ -110,6 +110,6 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 				TokenRules.value('*', false)
 			).optional(),
 			TokenRules.value(';', false)
-		), TokenActions.grouping());
+		), GroupingTokenAction.INSTANCE);
 	}
 }
