@@ -19,6 +19,7 @@
 package net.luis;
 
 import net.luis.utils.io.token.actions.TokenActions;
+import net.luis.utils.io.token.actions.core.GroupingMode;
 import net.luis.utils.io.token.grammar.GrammarBuilder;
 import net.luis.utils.io.token.rules.TokenRule;
 import net.luis.utils.io.token.rules.TokenRules;
@@ -49,16 +50,22 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 	public void addPreRules() {
 		//region Character and String Literals
 		this.builder.addRule(TokenRules.boundary(
-			TokenRules.value('\'', false),
+			TokenRules.value('"', false).exactly(3),
 			TokenRules.alwaysMatch(),
-			TokenRules.value('\'', false)
-		), TokenActions.grouping());
+			TokenRules.value('"', false).exactly(3)
+		), TokenActions.grouping(GroupingMode.MATCHED));
 		
 		this.builder.addRule(TokenRules.boundary(
 			TokenRules.value('"', false),
 			TokenRules.alwaysMatch(),
 			TokenRules.value('"', false)
-		), TokenActions.grouping());
+		), TokenActions.grouping(GroupingMode.MATCHED), false);
+		
+		this.builder.addRule(TokenRules.boundary(
+			TokenRules.value('\'', false),
+			TokenRules.alwaysMatch(),
+			TokenRules.value('\'', false)
+		), TokenActions.grouping(GroupingMode.MATCHED));
 		//endregion
 		
 		//region Comments
@@ -85,7 +92,7 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 		this.builder.addRule(TokenRules.any(
 			singleLineCommentRule,
 			multiLineCommentRule
-		), TokenActions.grouping());
+		), TokenActions.grouping(GroupingMode.MATCHED));
 		//endregion
 	}
 	
@@ -99,7 +106,7 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.value("package", false),
 			TokenRules.reference("FullQualifiedName"),
 			TokenRules.value(';', false)
-		), GroupingTokenAction.INSTANCE);
+		), TokenActions.grouping(GroupingMode.ALL));
 		
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value("import", false),
@@ -110,6 +117,6 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 				TokenRules.value('*', false)
 			).optional(),
 			TokenRules.value(';', false)
-		), GroupingTokenAction.INSTANCE);
+		), TokenActions.grouping(GroupingMode.ALL));
 	}
 }
