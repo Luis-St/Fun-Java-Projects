@@ -770,7 +770,13 @@ public class ComprehensiveSyntaxTest<T extends Number & Comparable<T>, U>
 		double d1 = 123.456;
 		double d2 = 1.234e2;
 		double d3 = 1.234E-2;
-		float f = 123.456f;
+		double d4 = 1_234.567_89;
+		double d5 = 0x1.91eb851eb851fp+6;
+		float f1 = 123.456f;
+		float f2 = 1.234e2f;
+		float f3 = 1.234E-2f;
+		float f4 = 1_234.567_89f;
+		float f5 = 0x1.91eb86p+6f;
 		
 		// Character literals
 		char ch1 = 'A';
@@ -887,7 +893,7 @@ public class ComprehensiveSyntaxTest<T extends Number & Comparable<T>, U>
 	// Already shown in NestedInterface
 	
 	// AutoCloseable implementation
-	@Override
+	@Override()
 	public void close() throws Exception {
 		System.out.println("Closing resource");
 	}
