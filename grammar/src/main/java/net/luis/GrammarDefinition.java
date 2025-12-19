@@ -68,6 +68,11 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 		), TokenActions.grouping(GroupingMode.MATCHED));
 		//endregion
 		
+		this.builder.addRule(
+			TokenRules.pattern("\\d+"),
+			TokenActions.grouping(GroupingMode.MATCHED)
+		);
+		
 		//region Comments
 		TokenRule singleLineCommentRule = TokenRules.boundary(
 			TokenRules.value('/', false).exactly(2),
@@ -117,6 +122,18 @@ public record GrammarDefinition(@NotNull GrammarBuilder builder) {
 				TokenRules.value('*', false)
 			).optional(),
 			TokenRules.value(';', false)
+		), TokenActions.grouping(GroupingMode.ALL));
+		
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.value('@', false),
+			TokenRules.all(
+				TokenRules.reference("Identifier"),
+				TokenRules.value("interface", false).not()
+			),
+			TokenRules.sequence(
+				TokenRules.value('(', false),
+				TokenRules.value(')', false)
+			).optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 	}
 }
