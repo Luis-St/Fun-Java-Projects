@@ -134,6 +134,7 @@ public class Main {
 		allowedCharacters.add('$');
 		allowedCharacters.add('~');
 		allowedCharacters.add('^');
+		allowedCharacters.add('_');
 		return allowedCharacters;
 	}
 	
@@ -165,7 +166,6 @@ public class Main {
 		separatorCharacters.add('>');
 		separatorCharacters.add('@');
 		separatorCharacters.add('\\');
-		separatorCharacters.add('_');
 		separatorCharacters.add(' ');
 		separatorCharacters.add('\n');
 		separatorCharacters.add('\t');

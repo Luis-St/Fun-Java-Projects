@@ -259,6 +259,7 @@ public class NumericTokenTest {
 		allowedCharacters.add('$');
 		allowedCharacters.add('~');
 		allowedCharacters.add('^');
+		allowedCharacters.add('_');
 		return allowedCharacters;
 	}
 
@@ -290,7 +291,6 @@ public class NumericTokenTest {
 		separatorCharacters.add('>');
 		separatorCharacters.add('@');
 		separatorCharacters.add('\\');
-		separatorCharacters.add('_');
 		separatorCharacters.add(' ');
 		separatorCharacters.add('\n');
 		separatorCharacters.add('\t');
