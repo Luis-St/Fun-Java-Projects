@@ -27,7 +27,8 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Grammar definition for Java numeric literals according to the official Java Language Specification.
  * Handles both pattern-based matching (for literals without separators) and sequence-based matching
- * (for literals containing '.' or '_' which are separator characters in the TokenReader).
+ * (for literals containing '.' which is a separator character in the TokenReader).
+ * Underscores within numeric literals are handled in the pattern rules using (?:_[0-9]+)* expressions.
  *
  * @author Luis-St
  */
@@ -47,59 +48,23 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 		this.addDecimalFloatWithExponentNoDotRule();
 		this.addDecimalFloatNoDotRules();
 
-		// Integer rules with underscores
-		this.addOctalIntWithUnderscoreRule();
-		this.addHexIntWithUnderscoreRule();
-		this.addBinaryIntWithUnderscoreRule();
-		this.addDecimalIntWithUnderscoreRule();
-
-		// Simple integer rules (pattern-based, no separators)
-		this.addHexIntRule();
-		this.addBinaryIntRule();
-		this.addOctalIntRule();
-		this.addDecimalIntRule();
+		// Integer rules (both with and without underscores)
+		this.addOctalIntRules();
+		this.addHexIntRules();
+		this.addBinaryIntRules();
+		this.addDecimalIntRules();
 	}
 
 	/**
 	 * Defines reusable patterns for numeric components.
 	 */
 	private void defineNumericPatterns() {
-		// Basic digit patterns
-		this.builder.defineRule("Digits", TokenRules.pattern("[0-9]+"));
-		this.builder.defineRule("HexDigits", TokenRules.pattern("[0-9a-fA-F]+"));
-		this.builder.defineRule("OctalDigits", TokenRules.pattern("[0-7]+"));
-		this.builder.defineRule("BinaryDigits", TokenRules.pattern("[01]+"));
-
-		// Digits with attached suffix (when suffix is not separated)
-		this.builder.defineRule("DigitsWithFloatSuffix", TokenRules.pattern("[0-9]+[fFdD]"));
-		this.builder.defineRule("DigitsWithLongSuffix", TokenRules.pattern("[0-9]+[lL]"));
-		this.builder.defineRule("HexDigitsWithFloatSuffix", TokenRules.pattern("[0-9a-fA-F]+[fFdD]"));
-		this.builder.defineRule("HexDigitsWithLongSuffix", TokenRules.pattern("[0-9a-fA-F]+[lL]"));
-		this.builder.defineRule("BinaryDigitsWithLongSuffix", TokenRules.pattern("[01]+[lL]"));
-
-		// Hex digits with exponent attached (for hex floats)
-		this.builder.defineRule("HexDigitsWithHexExponent", TokenRules.pattern("[0-9a-fA-F]+[pP][+-]?[0-9]+"));
-		this.builder.defineRule("HexDigitsWithHexExponentAndSuffix", TokenRules.pattern("[0-9a-fA-F]+[pP][+-]?[0-9]+[fFdD]"));
-
-		// Decimal digits with exponent attached (for decimal floats)
-		this.builder.defineRule("DigitsWithExponent", TokenRules.pattern("[0-9]+[eE][+-]?[0-9]+"));
-		this.builder.defineRule("DigitsWithExponentAndSuffix", TokenRules.pattern("[0-9]+[eE][+-]?[0-9]+[fFdD]"));
-		this.builder.defineRule("DigitsWithExponentStart", TokenRules.pattern("[0-9]+[eE][+-]?[0-9]+"));
-
-		// Hex digits with partial exponent (for handling underscores in exponent)
-		this.builder.defineRule("HexDigitsWithHexExponentStart", TokenRules.pattern("[0-9a-fA-F]+[pP][+-]?[0-9]+"));
-
-		// Exponent patterns
+		// Exponent patterns (sign without digits)
 		this.builder.defineRule("Exponent", TokenRules.pattern("[eE][+-]?"));
 		this.builder.defineRule("HexExponent", TokenRules.pattern("[pP][+-]?"));
-		this.builder.defineRule("ExponentWithDigits", TokenRules.pattern("[eE][+-]?[0-9]+"));
-		this.builder.defineRule("ExponentWithDigitsAndSuffix", TokenRules.pattern("[eE][+-]?[0-9]+[fFdD]"));
-		this.builder.defineRule("HexExponentWithDigits", TokenRules.pattern("[pP][+-]?[0-9]+"));
-		this.builder.defineRule("HexExponentWithDigitsAndSuffix", TokenRules.pattern("[pP][+-]?[0-9]+[fFdD]"));
 
-		// Suffix patterns
+		// Suffix pattern
 		this.builder.defineRule("FloatSuffix", TokenRules.pattern("[fFdD]"));
-		this.builder.defineRule("LongSuffix", TokenRules.pattern("[lL]"));
 	}
 
 	//region Hexadecimal Floating-Point Rules
@@ -109,118 +74,85 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 0x1.2p3, 0X1.FP-2, 0x.8p0, 0x1.p5, 0x1_2.3p4, 0x1.2_3p4, 0x1.2p1_0
 	 */
 	private void addHexFloatWithDotRules() {
-		// 0x1_2.3p4 where integer part has underscores and fractional has exponent
+		// 0x1.2p3 with integer and fractional parts (handles underscores everywhere)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("HexDigits")
-			)),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponent"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[pP][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2_3_4p5 where fractional has underscores and exponent
+		// 0x1.p3 (no fractional part, handles underscores in integer and exponent)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("HexDigits")
-			)),
-			TokenRules.pattern("[pP][+-]?[0-9]+"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[pP][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p1_0 where exponent has underscores
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponentStart"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.2p3f where fractional has exponent and suffix attached
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponentAndSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x.8p0f (no integer part, exponent and suffix attached)
+		// 0x.2p3 (no integer part, handles underscores in fractional and exponent)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX]"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponentAndSuffix")
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[pP][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p3 where fractional has exponent (suffix separate or none)
+		// 0x1.2p-3 where sign is separate token (0x1 . 2p - 3)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponent"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x.8p0 (no integer part, fractional has exponent)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponent"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.Fp-2 where exponent sign is separate
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('.', false),
-			TokenRules.pattern("[0-9a-fA-F]+[pP]"),
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[pP]"),
 			TokenRules.pattern("[+-]"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p3 with integer and fractional parts, exponent separate or together
+		// 0x1.p-3 (no fractional, sign is separate token)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.reference("HexDigits"),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigits").optional(),
-			TokenRules.reference("HexExponent"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[pP]"),
+			TokenRules.pattern("[+-]"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x.2p3 (no integer part, exponent separate)
+		// 0x.2p-3 (no integer, sign is separate token)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX]"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexDigits"),
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[pP]"),
+			TokenRules.pattern("[+-]"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
+			TokenRules.reference("FloatSuffix").optional()
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// 0x1.2p3 where exponent components are separate (0x1 . 2 p +/- 3) - sign attached to p
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
+			TokenRules.value('.', false),
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*").optional(),
 			TokenRules.reference("HexExponent"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
+			TokenRules.reference("FloatSuffix").optional()
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// 0x.2p3 (no integer part, exponent components separate)
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("0[xX]"),
+			TokenRules.value('.', false),
+			TokenRules.pattern("[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*"),
+			TokenRules.reference("HexExponent"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 	}
 
 	/**
 	 * Hexadecimal floating-point literals without decimal point.
-	 * Examples: 0x1p0, 0xABCp10, 0x1p5f
+	 * Examples: 0x1p0, 0xABCp10, 0x1p5f, 0x1_ABCp1_0
 	 */
 	private void addHexFloatNoDotRule() {
 		this.builder.addRule(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+[pP][+-]?[0-9]+[fFdD]?"),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[pP][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
@@ -234,81 +166,82 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 1.23e10, 1.e10, .5e-2, 1.0e1_000
 	 */
 	private void addDecimalFloatWithExponentAndDotRules() {
-		// 1.0e1_000 where exponent has underscores - MUST come first
+		// 1.23e10 with integer and fractional parts (handles underscores everywhere)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithExponentStart"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[eE][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23e10 where fractional has exponent attached
+		// 1.e10 (no fractional part, handles underscores in exponent)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithExponent"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[eE][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5e10 (no integer part, fractional has exponent)
+		// .5e10 (no integer part, handles underscores in fractional and exponent)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithExponent"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[eE][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23e-10 where exponent sign is separate
+		// 1.23e-10 where sign is separate token (1 . 23e - 10)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.pattern("[0-9]+[eE]"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[eE]"),
 			TokenRules.pattern("[+-]"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5e-2 (no integer part, exponent sign separate)
+		// 1.e-10 (no fractional, sign is separate token)
 		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.pattern("[0-9]+[eE]"),
+			TokenRules.pattern("[eE]"),
 			TokenRules.pattern("[+-]"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23e10 where all parts separate (integer, dot, fractional, exponent sign, exponent digits)
+		// .5e-10 (no integer, sign is separate token)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
-			TokenRules.reference("Digits").optional(),
-			TokenRules.reference("Exponent"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[eE]"),
+			TokenRules.pattern("[+-]"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5e10 (no integer part, all separate)
+		// 1.23e10 where exponent components are separate (1 . 23e +/- 10) - sign attached to e
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
+			TokenRules.value('.', false),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*").optional(),
+			TokenRules.reference("Exponent"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
+			TokenRules.reference("FloatSuffix").optional()
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// .5e10 (no integer part, exponent components separate)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("Exponent"),
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 	}
 
 	/**
 	 * Decimal floating-point literals with exponent but no decimal point.
-	 * Examples: 1e10, 1E-5, 1e10f
+	 * Examples: 1e10, 1E-5, 1e10f, 1_000e1_0
 	 */
 	private void addDecimalFloatWithExponentNoDotRule() {
 		this.builder.addRule(
-			TokenRules.pattern("[0-9]+[eE][+-]?[0-9]+[fFdD]?"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[eE][+-]?[0-9]+(?:_[0-9]+)*[fFdD]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
@@ -322,214 +255,72 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 3.14, 3.14f, .5, 123., 123.f, 3.14_15_92
 	 */
 	private void addDecimalFloatNoDotRules() {
-		// 1.23_45_67 with underscores in fractional part
+		// 1.23 with integer and fractional parts (handles underscores in fractional)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// .5_67_89 (no integer part, with underscores)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23f where suffix is attached to fractional digits
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithFloatSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// .5f where suffix is attached to fractional digits
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithFloatSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23 with integer and fractional parts (suffix separate or none)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 
 		// 123. (integer only, no fractional)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*"),
 			TokenRules.value('.', false),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL), false);
 
-		// .5 (fractional only, no integer, suffix separate or none)
+		// .5 (fractional only, no integer)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
+			TokenRules.pattern("[0-9]+(?:_[0-9]+)*[fFdD]?")
 		), TokenActions.grouping(GroupingMode.ALL));
 	}
 
 	//endregion
 
-	//region Integer Rules with Underscores
+	//region Integer Rules
 
 	/**
-	 * Octal integers with underscores.
-	 * Examples: 0_7_7_7, 07_77L
-	 * NOTE: Only matches sequences starting with exactly "0" (single zero token) to avoid
-	 * conflicts with decimal literals like 1_000_000.
+	 * Octal integer literals (with and without underscores).
+	 * Examples: 0, 00, 0777, 012, 0_7_7_7, 07_77L
 	 */
-	private void addOctalIntWithUnderscoreRule() {
-		// Simple case: 0_77L where suffix is attached (starts with exactly "0")
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('0', false),
-			TokenRules.value('_', false),
-			TokenRules.reference("DigitsWithLongSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// Multiple underscores or separate suffix (starts with exactly "0")
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('0', false),
-			TokenRules.value('_', false),
-			TokenRules.reference("OctalDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("OctalDigits")
-			)),
-			TokenRules.reference("LongSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-	}
-
-	/**
-	 * Hexadecimal integers with underscores.
-	 * Examples: 0xDE_AD_BE_EF, 0xFF_FF_FF_FFL
-	 */
-	private void addHexIntWithUnderscoreRule() {
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("HexDigits")
-			)),
-			TokenRules.reference("LongSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-	}
-
-	/**
-	 * Binary integers with underscores.
-	 * Examples: 0b1010_1010, 0B1111_0000L
-	 */
-	private void addBinaryIntWithUnderscoreRule() {
-		// Simple case with suffix attached: 0b1111_0000L
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[bB][01]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("BinaryDigitsWithLongSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// Simple case: 0b1111_0000 (single underscore, suffix separate or none)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[bB][01]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("BinaryDigits"),
-			TokenRules.reference("LongSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// Multiple underscores: 0b11_00_11_00L
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[bB][01]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("BinaryDigits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("BinaryDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("BinaryDigits")
-			)),
-			TokenRules.reference("LongSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-	}
-
-	/**
-	 * Decimal integers with underscores.
-	 * Examples: 1_000_000, 1_000L
-	 */
-	private void addDecimalIntWithUnderscoreRule() {
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.reference("LongSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-	}
-
-	//endregion
-
-	//region Simple Integer Rules (Pattern-based)
-
-	/**
-	 * Hexadecimal integer literals without underscores.
-	 * Examples: 0x0, 0x1A, 0XDEADBEEF, 0xFFFFL
-	 */
-	private void addHexIntRule() {
+	private void addOctalIntRules() {
 		this.builder.addRule(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+[lL]?"),
+			TokenRules.pattern("0[0-7]*(?:_[0-7]+)*[lL]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
 
 	/**
-	 * Binary integer literals without underscores.
-	 * Examples: 0b0, 0b1010, 0B1111, 0b1111L
+	 * Hexadecimal integer literals (with and without underscores).
+	 * Examples: 0x0, 0x1A, 0XDEADBEEF, 0xFFFFL, 0xDE_AD_BE_EF
 	 */
-	private void addBinaryIntRule() {
+	private void addHexIntRules() {
 		this.builder.addRule(
-			TokenRules.pattern("0[bB][01]+[lL]?"),
+			TokenRules.pattern("0[xX][0-9a-fA-F]+(?:_[0-9a-fA-F]+)*[lL]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
 
 	/**
-	 * Octal integer literals.
-	 * Examples: 0, 00, 0777, 012, 0777L
+	 * Binary integer literals (with and without underscores).
+	 * Examples: 0b0, 0b1010, 0B1111, 0b1111L, 0b1010_1010, 0B1111_0000L
 	 */
-	private void addOctalIntRule() {
+	private void addBinaryIntRules() {
 		this.builder.addRule(
-			TokenRules.pattern("0[0-7]*[lL]?"),
+			TokenRules.pattern("0[bB][01]+(?:_[01]+)*[lL]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
 
 	/**
-	 * Decimal integer literals without underscores.
-	 * Examples: 1, 42, 123, 9223372036854775807L
-	 * Note: This must come after octal rule to avoid matching octal as decimal.
+	 * Decimal integer literals (with and without underscores).
+	 * Examples: 1, 42, 123, 9223372036854775807L, 1_000_000, 1_000L
+	 * Note: Must come after octal rule to avoid matching octal as decimal.
 	 */
-	private void addDecimalIntRule() {
+	private void addDecimalIntRules() {
 		this.builder.addRule(
-			TokenRules.pattern("[1-9][0-9]*[lL]?"),
+			TokenRules.pattern("[1-9][0-9]*(?:_[0-9]+)*[lL]?"),
 			TokenActions.grouping(GroupingMode.MATCHED)
 		);
 	}
