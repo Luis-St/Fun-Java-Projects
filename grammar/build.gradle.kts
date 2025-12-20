@@ -80,3 +80,12 @@ tasks.register<JavaExec>("run") {
 	args = listOf()
 }
 
+tasks.register<JavaExec>("runNumericTokenTest") {
+	group = "runs"
+	mainClass.set("net.luis.NumericTokenTest")
+	classpath = sourceSets["main"].runtimeClasspath
+	enableAssertions = true
+	standardInput = System.`in`
+	args = listOf()
+}
+
