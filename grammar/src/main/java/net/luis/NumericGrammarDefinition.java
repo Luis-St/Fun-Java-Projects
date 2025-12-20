@@ -38,26 +38,26 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Rules are ordered by specificity to ensure correct matching.
 	 */
 	public void addNumericRules() {
-		defineNumericPatterns();
+		this.defineNumericPatterns();
 
 		// Floating-point rules (highest priority due to specificity)
-		addHexFloatWithDotRules();
-		addHexFloatNoDotRule();
-		addDecimalFloatWithExponentAndDotRules();
-		addDecimalFloatWithExponentNoDotRule();
-		addDecimalFloatNoDotRules();
+		this.addHexFloatWithDotRules();
+		this.addHexFloatNoDotRule();
+		this.addDecimalFloatWithExponentAndDotRules();
+		this.addDecimalFloatWithExponentNoDotRule();
+		this.addDecimalFloatNoDotRules();
 
 		// Integer rules with underscores
-		addOctalIntWithUnderscoreRule();
-		addHexIntWithUnderscoreRule();
-		addBinaryIntWithUnderscoreRule();
-		addDecimalIntWithUnderscoreRule();
+		this.addOctalIntWithUnderscoreRule();
+		this.addHexIntWithUnderscoreRule();
+		this.addBinaryIntWithUnderscoreRule();
+		this.addDecimalIntWithUnderscoreRule();
 
 		// Simple integer rules (pattern-based, no separators)
-		addHexIntRule();
-		addBinaryIntRule();
-		addOctalIntRule();
-		addDecimalIntRule();
+		this.addHexIntRule();
+		this.addBinaryIntRule();
+		this.addOctalIntRule();
+		this.addDecimalIntRule();
 	}
 
 	/**
@@ -109,7 +109,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 0x1.2p3, 0X1.FP-2, 0x.8p0, 0x1.p5, 0x1_2.3p4, 0x1.2_3p4, 0x1.2p1_0
 	 */
 	private void addHexFloatWithDotRules() {
-		// 0x1_2.3p4 where integer part has underscores and fractional has exponent (0x1 _ 2 . 3p4)
+		// 0x1_2.3p4 where integer part has underscores and fractional has exponent
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('_', false),
@@ -123,17 +123,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2_3p4 where fractional has underscores and exponent (0x1 . 2 _ 3p4)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigitsWithHexExponent"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.2_3_4p5 where fractional has multiple underscores and exponent (0x1 . 2 _ 3 _ 4p5)
+		// 0x1.2_3_4p5 where fractional has underscores and exponent
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('.', false),
@@ -148,7 +138,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p1_0 where exponent has underscores (0x1 . 2p1 _ 0)
+		// 0x1.2p1_0 where exponent has underscores
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('.', false),
@@ -162,26 +152,26 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p3f where fractional has exponent and suffix (0x1 . 2p3f)
+		// 0x1.2p3f where fractional has exponent and suffix attached
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('.', false),
 			TokenRules.reference("HexDigitsWithHexExponentAndSuffix")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.2p3 where fractional has exponent (0x1 . 2p3)
+		// 0x.8p0f (no integer part, exponent and suffix attached)
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("0[xX]"),
+			TokenRules.value('.', false),
+			TokenRules.reference("HexDigitsWithHexExponentAndSuffix")
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// 0x1.2p3 where fractional has exponent (suffix separate or none)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('.', false),
 			TokenRules.reference("HexDigitsWithHexExponent"),
 			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x.8p0 (no integer part, fractional has exponent and suffix)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigitsWithHexExponentAndSuffix")
 		), TokenActions.grouping(GroupingMode.ALL));
 
 		// 0x.8p0 (no integer part, fractional has exponent)
@@ -192,7 +182,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.91eb851eb851fp+6 where fractional has exponent letter and sign is separate (0x1 . 91eb851eb851fp + 6)
+		// 0x1.Fp-2 where exponent sign is separate
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('.', false),
@@ -202,72 +192,18 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.Fp-2 where parts are split (0x1 . FP - 2)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('.', false),
-			TokenRules.pattern("[0-9a-fA-F]+[pP]"),
-			TokenRules.pattern("[+-]"),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.2p3f where exponent and suffix together (0x1 . 2p3f)
+		// 0x1.2p3 with integer and fractional parts, exponent separate or together
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX]"),
 			TokenRules.reference("HexDigits"),
 			TokenRules.value('.', false),
-			TokenRules.reference("HexExponentWithDigitsAndSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.2p3 where exponent together (0x1 . 2p3)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexExponentWithDigits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.2p3f where all separate (0x1 . 2 p+/- 3 f)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexDigits"),
+			TokenRules.reference("HexDigits").optional(),
 			TokenRules.reference("HexExponent"),
 			TokenRules.reference("Digits"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 0x1.p3 (no fractional part, exponent together)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexExponentWithDigits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x1.p3 (no fractional part, all separate)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.reference("HexDigits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexExponent"),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x.2p3 (no integer part, exponent together)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX]"),
-			TokenRules.value('.', false),
-			TokenRules.reference("HexExponentWithDigits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 0x.2p3 (no integer part, all separate)
+		// 0x.2p3 (no integer part, exponent separate)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX]"),
 			TokenRules.value('.', false),
@@ -295,10 +231,10 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 
 	/**
 	 * Decimal floating-point literals with exponent and decimal point.
-	 * Examples: 1.23e10, 1.e10, .5e-2
+	 * Examples: 1.23e10, 1.e10, .5e-2, 1.0e1_000
 	 */
 	private void addDecimalFloatWithExponentAndDotRules() {
-		// 1.0e1_000 where exponent has underscores (1 . 0e1 _ 000) - MUST come first
+		// 1.0e1_000 where exponent has underscores - MUST come first
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
@@ -312,14 +248,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23e10f where fractional has exponent and suffix (1 . 23e10f)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithExponentAndSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23e10 where fractional has exponent (1 . 23e10)
+		// 1.23e10 where fractional has exponent attached
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
@@ -327,29 +256,14 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5e10f where fractional has exponent and suffix (. 5e10f)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithExponentAndSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// .5e10 where fractional has exponent (. 5e10)
+		// .5e10 (no integer part, fractional has exponent)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
 			TokenRules.reference("DigitsWithExponent"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5e-2 where exponent sign is separate (. 5e - 2)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('.', false),
-			TokenRules.pattern("[0-9]+[eE]"),
-			TokenRules.pattern("[+-]"),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23e-10 where exponent sign is separate (1 . 23e - 10)
+		// 1.23e-10 where exponent sign is separate
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
@@ -359,46 +273,22 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1e1_000 where exponent has underscores, no dot (needs to be in no-dot section)
-		// This will be handled by a pattern-based rule
-
-		// 1.23e10f where exponent and suffix are together (1 . 23e10f)
+		// .5e-2 (no integer part, exponent sign separate)
 		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
-			TokenRules.reference("ExponentWithDigitsAndSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23e10 where exponent is together (1 . 23e10)
-		this.builder.addRule(TokenRules.sequence(
+			TokenRules.pattern("[0-9]+[eE]"),
+			TokenRules.pattern("[+-]"),
 			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("ExponentWithDigits"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23e10f where all parts are separate (1 . 23 e+/- 10 f)
+		// 1.23e10 where all parts separate (integer, dot, fractional, exponent sign, exponent digits)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
+			TokenRules.reference("Digits").optional(),
 			TokenRules.reference("Exponent"),
 			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.e10 (no fractional part)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("ExponentWithDigits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// .5e10 (no integer part, exponent together)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.value('.', false),
-			TokenRules.reference("ExponentWithDigits"),
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
@@ -432,7 +322,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 3.14, 3.14f, .5, 123., 123.f, 3.14_15_92
 	 */
 	private void addDecimalFloatNoDotRules() {
-		// 1.23_45_67f with underscores in fractional part
+		// 1.23_45_67 with underscores in fractional part
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('.', false),
@@ -446,35 +336,7 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// 1.23f where suffix is attached to fractional part (1 . 23f)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("DigitsWithFloatSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 1.23 or 1.23f where suffix is separate
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("Digits"),
-			TokenRules.reference("FloatSuffix").optional()
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// 123.f where suffix is separate
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false),
-			TokenRules.reference("FloatSuffix")
-		), TokenActions.grouping(GroupingMode.ALL), false);
-
-		// 123. (no suffix)
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('.', false)
-		), TokenActions.grouping(GroupingMode.ALL), false);
-
-		// .5_67_89f with underscores
+		// .5_67_89 (no integer part, with underscores)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
 			TokenRules.reference("Digits"),
@@ -487,13 +349,35 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 			TokenRules.reference("FloatSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5f where suffix is attached
+		// 1.23f where suffix is attached to fractional digits
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.reference("Digits"),
+			TokenRules.value('.', false),
+			TokenRules.reference("DigitsWithFloatSuffix")
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// .5f where suffix is attached to fractional digits
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
 			TokenRules.reference("DigitsWithFloatSuffix")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// .5 or .5f where suffix is separate
+		// 1.23 with integer and fractional parts (suffix separate or none)
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.reference("Digits"),
+			TokenRules.value('.', false),
+			TokenRules.reference("Digits"),
+			TokenRules.reference("FloatSuffix").optional()
+		), TokenActions.grouping(GroupingMode.ALL));
+
+		// 123. (integer only, no fractional)
+		this.builder.addRule(TokenRules.sequence(
+			TokenRules.reference("Digits"),
+			TokenRules.value('.', false),
+			TokenRules.reference("FloatSuffix").optional()
+		), TokenActions.grouping(GroupingMode.ALL), false);
+
+		// .5 (fractional only, no integer, suffix separate or none)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.value('.', false),
 			TokenRules.reference("Digits"),
@@ -537,20 +421,6 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 0xDE_AD_BE_EF, 0xFF_FF_FF_FFL
 	 */
 	private void addHexIntWithUnderscoreRule() {
-		// With Long suffix attached to last digit group
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("HexDigits")
-			)),
-			TokenRules.value('_', false),
-			TokenRules.reference("HexDigitsWithLongSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// Without suffix or with separate suffix
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[xX][0-9a-fA-F]+"),
 			TokenRules.value('_', false),
@@ -568,30 +438,26 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 0b1010_1010, 0B1111_0000L
 	 */
 	private void addBinaryIntWithUnderscoreRule() {
-		// Simple case: 0b1111_0000L where suffix is attached (0b1111 _ 0000L)
+		// Simple case with suffix attached: 0b1111_0000L
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[bB][01]+"),
 			TokenRules.value('_', false),
 			TokenRules.reference("BinaryDigitsWithLongSuffix")
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// With Long suffix attached to last digit group (multiple underscores)
+		// Simple case: 0b1111_0000 (single underscore, suffix separate or none)
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[bB][01]+"),
 			TokenRules.value('_', false),
 			TokenRules.reference("BinaryDigits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("BinaryDigits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("BinaryDigits")
-			)),
 			TokenRules.reference("LongSuffix").optional()
 		), TokenActions.grouping(GroupingMode.ALL));
 
-		// Without suffix or with separate suffix
+		// Multiple underscores: 0b11_00_11_00L
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.pattern("0[bB][01]+"),
+			TokenRules.value('_', false),
+			TokenRules.reference("BinaryDigits"),
 			TokenRules.value('_', false),
 			TokenRules.reference("BinaryDigits"),
 			TokenRules.zeroOrMore(TokenRules.sequence(
@@ -607,20 +473,6 @@ public record NumericGrammarDefinition(@NotNull GrammarBuilder builder) {
 	 * Examples: 1_000_000, 1_000L
 	 */
 	private void addDecimalIntWithUnderscoreRule() {
-		// With Long suffix attached to last digit group
-		this.builder.addRule(TokenRules.sequence(
-			TokenRules.reference("Digits"),
-			TokenRules.value('_', false),
-			TokenRules.reference("Digits"),
-			TokenRules.zeroOrMore(TokenRules.sequence(
-				TokenRules.value('_', false),
-				TokenRules.reference("Digits")
-			)),
-			TokenRules.value('_', false),
-			TokenRules.reference("DigitsWithLongSuffix")
-		), TokenActions.grouping(GroupingMode.ALL));
-
-		// Without suffix or with separate suffix
 		this.builder.addRule(TokenRules.sequence(
 			TokenRules.reference("Digits"),
 			TokenRules.value('_', false),
