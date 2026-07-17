@@ -20,8 +20,9 @@ package net.luis;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import net.luis.utils.io.codec.Codec;
-import net.luis.utils.io.codec.CodecBuilder;
+import net.luis.utils.io.codec.*;
+import net.luis.utils.io.codec.decoder.DecoderException;
+import net.luis.utils.io.codec.encoder.EncoderException;
 import net.luis.utils.io.codec.mapping.CodecConstructor;
 import net.luis.utils.io.codec.mapping.GenericInfo;
 import net.luis.utils.io.codec.provider.JsonTypeProvider;
@@ -79,7 +80,7 @@ public class Main {
 		@GenericInfo(String.class) @NotNull Optional<String> nickname
 	) {}
 	
-	public static void main(String[] args) {
+	public static void main(String[] args) throws EncoderException, DecoderException {
 		Codec<Person> codec = CodecBuilder.of(Person.class);
 		
 		Person person = new Person(
