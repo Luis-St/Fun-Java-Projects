@@ -16,3 +16,4 @@ rootProject.name = "Fun-Java-Projects"
 include("codec-serialization")
 include("grammar")
 include("utility")
+include("code-generator")

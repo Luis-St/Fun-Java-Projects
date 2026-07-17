@@ -6,6 +6,7 @@ val googleGuava: String by project
 val log4jAPI: String by project
 val log4jCore: String by project
 val apacheLang: String by project
+val jspecify: String by project
 val jetBrainsAnnotations: String by project
 val junitJupiter: String by project
 val junitPlatformLauncher: String by project
@@ -15,9 +16,6 @@ plugins {
 	id("maven-publish")
 	id("net.luis.lm")
 }
-
-group = "org.example"
-version = "unspecified"
 
 repositories {
 	mavenCentral()
@@ -43,6 +41,7 @@ dependencies {
 	implementation("org.apache.logging.log4j:log4j-core:${log4jCore}") // Logging
 	implementation("org.apache.commons:commons-lang3:${apacheLang}") // Utility
 	// Other
+	implementation("org.jspecify:jspecify:${jspecify}") // Nullability
 	implementation("org.jetbrains:annotations:${jetBrainsAnnotations}") // Annotations
 	// Test
 	testImplementation("org.junit.jupiter:junit-jupiter:${junitJupiter}")
