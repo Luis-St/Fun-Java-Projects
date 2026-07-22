@@ -19,14 +19,14 @@
 package net.luis;
 
 import net.luis.utils.io.network.IpEndpoint;
-import net.luis.utils.io.network.connection.event.*;
+import net.luis.utils.io.network.connection.Connection;
 import net.luis.utils.io.network.connection.exception.NetworkErrorType;
 import net.luis.utils.io.network.connection.tcp.*;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
@@ -71,12 +71,12 @@ public class Server {
 		}
 	}
 	
-	private static void onClientConnect(@NonNull ConnectEvent event) {
-		LOGGER.info(SERVER, "Client connected: {}", event.remoteEndpoint()); // ToDo: Add TcpConnection parameter to onClientConnect method
+	private static void onClientConnect(@Nullable Connection connection, @NonNull IpEndpoint localEndpoint, @NonNull IpEndpoint remoteEndpoint, @NonNull Instant timestamp) {
+		LOGGER.info(SERVER, "Client connected: {}", remoteEndpoint);
 	}
 	
-	private static void onClientDisconnect(@NonNull DisconnectEvent event) {
-		LOGGER.info(SERVER, "Client disconnected: {}", event.remoteEndpoint());
+	private static void onClientDisconnect(@Nullable Connection connection, @NonNull IpEndpoint localEndpoint, @NonNull IpEndpoint remoteEndpoint, @NonNull Instant timestamp) {
+		LOGGER.info(SERVER, "Client disconnected: {}", remoteEndpoint);
 	}
 	
 	private static void onMessage(@NonNull TcpServer server, @NonNull TcpConnection connection, byte @NonNull [] data) {
@@ -102,7 +102,7 @@ public class Server {
 		}
 	}
 	
-	private static void onError(@NonNull NetworkErrorType errorType, @NonNull String message, @Nullable Throwable cause) {
-		LOGGER.error(SERVER, "Network error [{}]: {}", errorType, message, cause); // ToDo: Add Optional<TcpConnection> parameter to onError method to log connection details if available
+	private static void onError(@Nullable Connection connection, @NonNull NetworkErrorType errorType, @NonNull String message, @Nullable Throwable cause) {
+		LOGGER.error(SERVER, "Network error [{}]: {}", errorType, message, cause);
 	}
 }

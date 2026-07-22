@@ -94,8 +94,6 @@ public class PacketRegistry {
 		return codec.encode(ToonTypeProvider.INSTANCE, (T) packet);
 	}
 	
-	// Issue: Packages with no content fail when reading toon data
-	
 	public static byte @NonNull [] write(@NonNull Packet packet) {
 		int packetIndex = PACKETS.indexOf(packet.getClass());
 		if (packetIndex == -1) {
@@ -112,6 +110,7 @@ public class PacketRegistry {
 			
 			if (codec instanceof UnitCodec<? extends Packet>) {
 				stream.writeBoolean(true);
+				stream.flush();
 				return os.toByteArray();
 			}
 			
@@ -120,6 +119,7 @@ public class PacketRegistry {
 				
 				stream.writeBoolean(false);
 				stream.writeUTF(element.toString(ToonConfig.COMPACT));
+				stream.flush();
 				return os.toByteArray();
 			} catch (EncoderException e) {
 				throw new RuntimeException("Failed to encode packet: " + packet.getClass().getName(), e);

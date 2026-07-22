@@ -39,7 +39,7 @@ public class Client {
 	
 	public static final Logger LOGGER = LogManager.getLogger(Client.class);
 	public static final Marker CLIENT = MarkerManager.getMarker("Client");
-	private static final boolean CONFIRMATION = false;
+	private static final boolean CONFIRMATION = true;
 	
 	static void run(@NonNull UUID clientId, @NonNull IpEndpoint endpoint) {
 		TcpClientConfig config = TcpClientConfig.builder().build();
