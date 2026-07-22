@@ -19,7 +19,7 @@
 package net.luis;
 
 import net.luis.utils.io.network.IpEndpoint;
-import net.luis.utils.io.network.connection.event.ConnectionEvent;
+import net.luis.utils.io.network.connection.event.*;
 import net.luis.utils.io.network.connection.exception.NetworkErrorType;
 import net.luis.utils.io.network.connection.tcp.*;
 import org.apache.logging.log4j.*;
@@ -27,6 +27,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -70,29 +71,34 @@ public class Server {
 		}
 	}
 	
-	private static void onClientConnect(@NonNull ConnectionEvent event) {
+	private static void onClientConnect(@NonNull ConnectEvent event) {
 		LOGGER.info(SERVER, "Client connected: {}", event.remoteEndpoint()); // ToDo: Add TcpConnection parameter to onClientConnect method
 	}
 	
-	private static void onClientDisconnect(@NonNull ConnectionEvent event) {
+	private static void onClientDisconnect(@NonNull DisconnectEvent event) {
 		LOGGER.info(SERVER, "Client disconnected: {}", event.remoteEndpoint());
 	}
 	
 	private static void onMessage(@NonNull TcpServer server, @NonNull TcpConnection connection, byte @NonNull [] data) {
-		LOGGER.info(SERVER, "Received message from {}: {}", connection.remoteEndpoint(), new String(data));
+		LOGGER.info(SERVER, "Received message from {}", connection.remoteEndpoint());
 		
-		String request = new String(data, StandardCharsets.UTF_8);
-		if ("close".equals(request)) {
-			LOGGER.info(SERVER, "Closing connection with {} as requested.", connection.remoteEndpoint());
-			connection.close();
-		} else {
-			try {
-				String response = "Hello from server!";
-				LOGGER.info(SERVER, "Sending response to {}: {}", connection.remoteEndpoint(), response);
-				connection.send(response.getBytes(StandardCharsets.UTF_8));
-			} catch (Exception e) {
-				LOGGER.error(SERVER, "Error sending response to {}: {}", connection.remoteEndpoint(), e.getMessage());
+		try {
+			PacketRegistry.Packet packet = PacketRegistry.read(data);
+			if (packet instanceof PacketRegistry.ClientConnectPacket(UUID clientId)) {
+				LOGGER.info(SERVER, "Received ClientConnectPacket from clientId: {}", clientId);
+				
+				connection.send(PacketRegistry.write(new PacketRegistry.HelloClientPacket()));
+			} else if (packet instanceof PacketRegistry.MessagePacket(String message)) {
+				LOGGER.info(SERVER, "Received MessagePacket with message: {}", message);
+			} else if (packet instanceof PacketRegistry.ClientDisconnectPacket(UUID clientId, boolean serverConfirmation)) {
+				LOGGER.info(SERVER, "Received ClientDisconnectPacket from clientId: {}, serverConfirmation: {}", clientId, serverConfirmation);
+				
+				if (serverConfirmation) {
+					connection.send(PacketRegistry.write(new PacketRegistry.ByeClientPacket()));
+				}
 			}
+		} catch (Exception e) {
+			LOGGER.error(SERVER, "Error sending response to {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
 		}
 	}
 	

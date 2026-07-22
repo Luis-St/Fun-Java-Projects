@@ -1,7 +1,6 @@
 package net.luis;
 
 import net.luis.utils.io.network.IpEndpoint;
-import net.luis.utils.io.network.address.IpAddresses;
 import net.luis.utils.io.network.address.ipv4.Ipv4Address;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;

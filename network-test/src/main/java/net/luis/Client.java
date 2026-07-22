@@ -19,13 +19,15 @@
 package net.luis;
 
 import net.luis.utils.io.network.IpEndpoint;
-import net.luis.utils.io.network.connection.tcp.*;
+import net.luis.utils.io.network.connection.tcp.TcpClient;
+import net.luis.utils.io.network.connection.tcp.TcpClientConfig;
+import org.apache.commons.lang3.ThreadUtils;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
 
 /**
  *
@@ -37,8 +39,7 @@ public class Client {
 	
 	public static final Logger LOGGER = LogManager.getLogger(Client.class);
 	public static final Marker CLIENT = MarkerManager.getMarker("Client");
-	
-	// ToDo: Add simple packet layer with packet id -> codec
+	private static final boolean CONFIRMATION = false;
 	
 	static void run(@NonNull UUID clientId, @NonNull IpEndpoint endpoint) {
 		TcpClientConfig config = TcpClientConfig.builder().build();
@@ -48,25 +49,35 @@ public class Client {
 			client.connect(endpoint);
 			LOGGER.info(CLIENT, "Client connected to {}:{}", endpoint.address(), endpoint.port());
 			
-			client.send(("Hello from client " + clientId + "!").getBytes(StandardCharsets.UTF_8));
-			byte[] response = client.receive();
-			if (response.length == 0) {
-				LOGGER.warn(CLIENT, "Connection unexpectedly closed by server.");
-			}
-			LOGGER.info(CLIENT, "Received response from server: {}", new String(response, StandardCharsets.UTF_8));
+			client.send(PacketRegistry.write(new PacketRegistry.ClientConnectPacket(clientId)));
 			
-			client.send("close".getBytes(StandardCharsets.UTF_8));
-			if (client.receive().length == 0) {
-				LOGGER.warn(CLIENT, "Connection closed by server.");
+			PacketRegistry.Packet response = PacketRegistry.read(client.receive());
+			if (response instanceof PacketRegistry.HelloClientPacket hello) {
+				LOGGER.info(CLIENT, "Received hello packet from server.");
 			} else {
-				LOGGER.warn(CLIENT, "Unexpected response from server after sending 'close' command.");
+				throw new IllegalStateException("Unexpected packet type received from server: " + response.getClass().getSimpleName());
+			}
+			
+			client.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Hello from client " + clientId + "!")));
+			
+			ThreadUtils.sleep(Duration.ofMillis(1000));
+			
+			client.send(PacketRegistry.write(new PacketRegistry.ClientDisconnectPacket(clientId, CONFIRMATION)));
+			
+			if (CONFIRMATION) {
+				response = PacketRegistry.read(client.receive());
+				if (response instanceof PacketRegistry.ByeClientPacket bye) {
+					LOGGER.info(CLIENT, "Received bye packet from server.");
+				} else {
+					throw new IllegalStateException("Unexpected packet type received from server: " + response.getClass().getSimpleName());
+				}
 			}
 			
 			LOGGER.info(CLIENT, "Disconnecting client...");
 			client.close();
 			LOGGER.info(CLIENT, "Client disconnected.");
 		} catch (Exception e) {
-			LOGGER.error(CLIENT, "Client error: {}", e.getMessage());
+			LOGGER.error(CLIENT, "Client error: {}", e.getMessage(), e);
 		}
 	}
 }
