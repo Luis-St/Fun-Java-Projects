@@ -29,8 +29,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 
 import java.io.*;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 /**
  *
@@ -42,49 +41,91 @@ public class PacketRegistry {
 	
 	public interface Packet {}
 	
-	record ClientConnectPacket(@NonNull UUID clientId) implements Packet {
+	public interface ClientToServerPacket extends Packet {}
+	
+	public interface ServerToClientPacket extends Packet {}
+	
+	public record PQKEInitializationPacket() implements ClientToServerPacket {
+		
+		public static final Codec<PQKEInitializationPacket> CODEC = Codecs.unit(PQKEInitializationPacket::new);
+	}
+	
+	public record PQKEPublicKeyPacket(byte @NonNull [] publicKey) implements ClientToServerPacket {
+		
+		public static final Codec<PQKEPublicKeyPacket> CODEC = CodecBuilder.of(
+			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1206)).fieldOf("publicKey", "key",PQKEPublicKeyPacket::publicKey)
+		).create(PQKEPublicKeyPacket::new);
+	}
+	
+	public record PQKEEncapsulationPacket(byte @NonNull [] encapsulation) implements ClientToServerPacket {
+		
+		public static final Codec<PQKEEncapsulationPacket> CODEC = CodecBuilder.of(
+			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1088)).fieldOf("encapsulation", "encap", PQKEEncapsulationPacket::encapsulation)
+		).create(PQKEEncapsulationPacket::new);
+	}
+	
+	public record ClientConnectPacket(@NonNull UUID clientId) implements ClientToServerPacket {
 		
 		public static final Codec<ClientConnectPacket> CODEC = CodecBuilder.of(
-			Codecs.UUID.version4().fieldOf("clientId", "id", ClientConnectPacket::clientId)
+			Codecs.UUID.version(b -> b.in(List.of(0, 4))).fieldOf("clientId", "id", ClientConnectPacket::clientId)
 		).create(ClientConnectPacket::new);
 	}
 	
-	record HelloClientPacket() implements Packet {
+	public record HelloClientPacket() implements ServerToClientPacket {
 		
 		public static final Codec<HelloClientPacket> CODEC = Codecs.unit(HelloClientPacket::new);
 	}
 	
-	record MessagePacket(@NotNull String message) implements Packet {
+	public record MessagePacket(@NotNull String message) implements Packet {
 		
 		public static final Codec<MessagePacket> CODEC = CodecBuilder.of(
 			Codecs.STRING.length(LengthConstraint::notEmpty).fieldOf("message", "msg", MessagePacket::message)
 		).create(MessagePacket::new);
 	}
 	
-	record ClientDisconnectPacket(@NonNull UUID clientId, boolean serverConfirmation) implements Packet {
+	public record BinaryMessagePacket(byte @NonNull [] message) implements Packet {
+		
+		public static final Codec<BinaryMessagePacket> CODEC = CodecBuilder.of(
+			Codecs.BYTE_ARRAY.length(LengthConstraint::notEmpty).fieldOf("message", "msg", BinaryMessagePacket::message)
+		).create(BinaryMessagePacket::new);
+	}
+	
+	public record ClientDisconnectPacket(@NonNull UUID clientId, boolean serverConfirmation) implements ClientToServerPacket {
 		
 		public static final Codec<ClientDisconnectPacket> CODEC = CodecBuilder.of(
-			Codecs.UUID.version4().fieldOf("clientId", "id", ClientDisconnectPacket::clientId),
+			Codecs.UUID.version(b -> b.in(List.of(0, 4))).fieldOf("clientId", "id", ClientDisconnectPacket::clientId),
 			Codecs.BOOLEAN.fieldOf("serverConfirmation", "confirmation", ClientDisconnectPacket::serverConfirmation)
 		).create(ClientDisconnectPacket::new);
 	}
 	
-	record ByeClientPacket() implements Packet {
+	public record ByeClientPacket() implements ServerToClientPacket {
 		
 		public static final Codec<ByeClientPacket> CODEC = Codecs.unit(ByeClientPacket::new);
 	}
 	
 	private static final List<Class<? extends Packet>> PACKETS = List.of(
+		// PQKE Packets
+		PQKEInitializationPacket.class,
+		PQKEPublicKeyPacket.class,
+		PQKEEncapsulationPacket.class,
+		// General Packets
 		ClientConnectPacket.class,
 		HelloClientPacket.class,
 		MessagePacket.class,
+		BinaryMessagePacket.class,
 		ClientDisconnectPacket.class,
 		ByeClientPacket.class
 	);
 	private static final List<Codec<? extends Packet>> CODECS = List.of(
+		// PQKE Packets
+		PQKEInitializationPacket.CODEC,
+		PQKEPublicKeyPacket.CODEC,
+		PQKEEncapsulationPacket.CODEC,
+		// General Packets
 		ClientConnectPacket.CODEC,
 		HelloClientPacket.CODEC,
 		MessagePacket.CODEC,
+		BinaryMessagePacket.CODEC,
 		ClientDisconnectPacket.CODEC,
 		ByeClientPacket.CODEC
 	);
@@ -154,6 +195,16 @@ public class PacketRegistry {
 			}
 		} catch (Exception e) {
 			throw new RuntimeException("Failed to read packet data", e);
+		}
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static <T extends Packet> @NotNull T readExpected(byte @NonNull [] bytes, @NonNull Class<T> expectedClass) {
+		Packet packet = read(bytes);
+		if (expectedClass.isInstance(packet)) {
+			return (T) packet;
+		} else {
+			throw new RuntimeException("Unexpected packet type received: " + packet.getClass().getSimpleName() + ", expected: " + expectedClass.getSimpleName());
 		}
 	}
 }

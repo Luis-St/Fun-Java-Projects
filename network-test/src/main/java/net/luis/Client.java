@@ -21,12 +21,9 @@ package net.luis;
 import net.luis.utils.io.network.IpEndpoint;
 import net.luis.utils.io.network.connection.tcp.TcpClient;
 import net.luis.utils.io.network.connection.tcp.TcpClientConfig;
-import org.apache.commons.lang3.ThreadUtils;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;
 
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -51,26 +48,25 @@ public class Client {
 			
 			client.send(PacketRegistry.write(new PacketRegistry.ClientConnectPacket(clientId)));
 			
-			PacketRegistry.Packet response = PacketRegistry.read(client.receive());
-			if (response instanceof PacketRegistry.HelloClientPacket hello) {
-				LOGGER.info(CLIENT, "Received hello packet from server.");
-			} else {
-				throw new IllegalStateException("Unexpected packet type received from server: " + response.getClass().getSimpleName());
+			PacketRegistry.HelloClientPacket helloClientPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.HelloClientPacket.class);
+			LOGGER.info(CLIENT, "Received hello packet from server.");
+			
+			try (PQKE.Session session = PQKE.exchangeClient(client, CLIENT)) {
+				session.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Encrypted hello from client " + clientId + "!")));
+				
+				PacketRegistry.MessagePacket messageResponse = PacketRegistry.readExpected(session.receive(), PacketRegistry.MessagePacket.class);
+				LOGGER.info(CLIENT, "Received message from server: {}", messageResponse.message());
 			}
 			
-			client.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Hello from client " + clientId + "!")));
+			client.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Unencrypted hello from client " + clientId + "!")));
 			
-			ThreadUtils.sleep(Duration.ofMillis(1000));
+			PacketRegistry.MessagePacket messageResponse = PacketRegistry.readExpected(client.receive(), PacketRegistry.MessagePacket.class);
+			LOGGER.info(CLIENT, "Received message from server: {}", messageResponse.message());
 			
 			client.send(PacketRegistry.write(new PacketRegistry.ClientDisconnectPacket(clientId, CONFIRMATION)));
-			
 			if (CONFIRMATION) {
-				response = PacketRegistry.read(client.receive());
-				if (response instanceof PacketRegistry.ByeClientPacket bye) {
-					LOGGER.info(CLIENT, "Received bye packet from server.");
-				} else {
-					throw new IllegalStateException("Unexpected packet type received from server: " + response.getClass().getSimpleName());
-				}
+				PacketRegistry.ByeClientPacket byeClientPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.ByeClientPacket.class);
+				LOGGER.info(CLIENT, "Received bye packet from server.");
 			}
 			
 			LOGGER.info(CLIENT, "Disconnecting client...");

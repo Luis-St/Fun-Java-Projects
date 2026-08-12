@@ -17,5 +17,4 @@ include("codec-serialization")
 include("grammar")
 include("utility")
 include("code-generator")
-
 include("network-test")

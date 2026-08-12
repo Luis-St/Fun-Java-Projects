@@ -8,7 +8,7 @@
 					"name": "ConsoleTrace",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C:%line/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C:%line/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "TRACE",
@@ -20,7 +20,7 @@
 					"name": "ConsoleDebug",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C{1}:%line/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C{1}:%line/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "DEBUG",
@@ -32,7 +32,7 @@
 					"name": "ConsoleInfo",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "INFO",
@@ -44,7 +44,7 @@
 					"name": "ConsoleWarn",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "WARN",
@@ -56,7 +56,7 @@
 					"name": "ConsoleError",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "ERROR",
@@ -68,7 +68,7 @@
 					"name": "ConsoleFatal",
 					"target": "SYSTEM_OUT",
 					"PatternLayout": {
-						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}] %msg%n%throwable}{] \\[]}{]}"
+						"pattern": "%replace{[%d{HH:mm:ss}] [%t] [%marker] [%X{pqke}] [%X{client.id}] [%C{1}/%level{TRACE=Trace, DEBUG=Debug, INFO=Info, WARN=Warn, ERROR=Error, FATAL=Fatal}]}{ \\[\\]}{} %msg%n%throwable"
 					},
 					"LevelMatchFilter": {
 						"level": "FATAL",
