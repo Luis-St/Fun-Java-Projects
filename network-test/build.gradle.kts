@@ -10,6 +10,7 @@ val jackson: String by project
 val apacheLang: String by project
 val hikaricp: String by project
 val postgresql: String by project
+val bouncyCastle: String by project
 val jspecify: String by project
 val jetBrainsAnnotations: String by project
 val junitJupiter: String by project
@@ -48,6 +49,8 @@ dependencies {
 	// Database
 	implementation("com.zaxxer:HikariCP:${hikaricp}") // Connection Pool
 	runtimeOnly("org.postgresql:postgresql:${postgresql}") // PostgreSQL Driver
+	// Crypto
+	implementation("org.bouncycastle:bcprov-jdk18on:${bouncyCastle}")
 	// Other
 	implementation("org.jspecify:jspecify:${jspecify}") // Nullability
 	implementation("org.jetbrains:annotations:${jetBrainsAnnotations}") // Annotations
