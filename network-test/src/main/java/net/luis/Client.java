@@ -34,9 +34,9 @@ import java.util.UUID;
 
 public class Client {
 	
+	private static final boolean CONFIRMATION = true;
 	public static final Logger LOGGER = LogManager.getLogger(Client.class);
 	public static final Marker CLIENT = MarkerManager.getMarker("Client");
-	private static final boolean CONFIRMATION = true;
 	
 	static void run(@NonNull UUID clientId, @NonNull IpEndpoint endpoint) {
 		TcpClientConfig config = TcpClientConfig.builder().build();
@@ -63,7 +63,7 @@ public class Client {
 			PacketRegistry.MessagePacket messageResponse = PacketRegistry.readExpected(client.receive(), PacketRegistry.MessagePacket.class);
 			LOGGER.info(CLIENT, "Received message from server: {}", messageResponse.message());
 			
-			client.send(PacketRegistry.write(new PacketRegistry.ClientDisconnectPacket(clientId, CONFIRMATION)));
+			client.send(PacketRegistry.write(new PacketRegistry.ClientDisconnectPacket(CONFIRMATION)));
 			if (CONFIRMATION) {
 				PacketRegistry.ByeClientPacket byeClientPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.ByeClientPacket.class);
 				LOGGER.info(CLIENT, "Received bye packet from server.");

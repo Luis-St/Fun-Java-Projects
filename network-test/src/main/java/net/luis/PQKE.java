@@ -31,7 +31,6 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.HKDFParameterSpec;
 import java.nio.ByteBuffer;
 import java.security.*;
-import java.security.spec.NamedParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 
 import static java.nio.charset.StandardCharsets.*;
@@ -70,28 +69,64 @@ public class PQKE {
 		return ByteBuffer.allocate(NONCE_LEN).putInt(0).putLong(seq).array();
 	}
 	
-	public static @NotNull Session exchangeServer(@NotNull TcpConnection connection, @NotNull Marker marker) throws Exception {
+	private static void wrap(PacketRegistry.@NotNull BinaryMessagePacket packet, @NotNull ThrowableConsumer<PacketRegistry.BinaryMessagePacket, NetworkConnectionException> supplier) throws NetworkConnectionException {
+		try {
+			ThreadContext.put("pqke", "PQKE-Session");
+			supplier.accept(packet);
+		} catch (Exception e) {
+			throw e;
+		} finally {
+			ThreadContext.remove("pqke");
+		}
+	}
+	
+	private static <T> @NotNull T wrap(@NotNull ThrowableSupplier<T, NetworkConnectionException> supplier) throws NetworkConnectionException {
+		try {
+			ThreadContext.put("pqke", "PQKE-Session");
+			return supplier.get();
+		} catch (Exception e) {
+			throw e;
+		} finally {
+			ThreadContext.remove("pqke");
+		}
+	}
+	
+	public static void beginServerExchange(@NotNull TcpConnection connection, @NotNull Marker marker) {
 		ThreadContext.put("pqke", "PQKE-Session");
 		
 		LOGGER.info(marker, "Initializing PQKE handshake with client...");
 		try {
 			KeyPair kp = KeyPairGenerator.getInstance(KEM_ALG).generateKeyPair();
 			byte[] publicKey = kp.getPublic().getEncoded();
+			
 			connection.send(PacketRegistry.write(new PacketRegistry.PQKEPublicKeyPacket(publicKey)));
 			LOGGER.info(marker, "Sent PQKE public key to client");
 			
-			PacketRegistry.PQKEEncapsulationPacket encapsulationPacket = PacketRegistry.readExpected(connection.receive(), PacketRegistry.PQKEEncapsulationPacket.class);
-			byte[] encapsulation = encapsulationPacket.encapsulation();
-			
+			connection.context().set("pqke", new PendingHandshake(kp, publicKey));
+		} catch (NetworkConnectionException | GeneralSecurityException e) {
+			LOGGER.error(marker, "Failed to establish PQKE session with client {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
+		} finally {
+			ThreadContext.remove("pqke");
+		}
+	}
+	
+	public static @NotNull Session completeServerExchange(@NotNull TcpConnection connection, byte @NotNull [] encapsulation, @NotNull Marker marker) throws Exception {
+		if (!connection.context().contains("pqke")) {
+			throw new IllegalStateException("PQKE handshake not initialized for this connection");
+		}
+		ThreadContext.put("pqke", "PQKE-Session");
+		
+		PendingHandshake pending = connection.context().get("pqke", PendingHandshake.class).orElseThrow();
+		try {
 			SecretKey shared = KEM.getInstance(KEM_ALG)
-				.newDecapsulator(kp.getPrivate())
+				.newDecapsulator(pending.keyPair.getPrivate())
 				.decapsulate(encapsulation);
 			
 			LOGGER.info(marker, "PQKE session established with client: {}", connection.remoteEndpoint());
-			byte[] transcript = transcript(publicKey, encapsulation);
+			byte[] transcript = transcript(pending.publicKey, encapsulation);
 			Session session = new Session(
-				packet -> connection.send(PacketRegistry.write(packet)),
-				() -> PacketRegistry.readExpected(connection.receive(), PacketRegistry.BinaryMessagePacket.class),
+				packet -> wrap(packet, p -> connection.send(PacketRegistry.write(p))),
+				() -> wrap(() -> PacketRegistry.readExpected(connection.receive(), PacketRegistry.BinaryMessagePacket.class)),
 				derive(shared, transcript, "s2c"),
 				derive(shared, transcript, "c2s")
 			);
@@ -107,12 +142,15 @@ public class PQKE {
 			} catch (Exception e) {
 				LOGGER.error(marker, "Failed to establish PQKE session with client {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
 				session.close();
+				ThreadContext.remove("pqke");
 				throw e;
 			}
-		} catch (NetworkConnectionException | GeneralSecurityException e) {
+		} catch (Exception e) {
 			LOGGER.error(marker, "Failed to establish PQKE session with client {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
 			ThreadContext.remove("pqke");
 			throw e;
+		} finally {
+			connection.context().remove("pqke");
 		}
 	}
 	
@@ -138,8 +176,8 @@ public class PQKE {
 			LOGGER.info(marker, "Established PQKE session with server: {}", client.remoteEndpoint());
 			byte[] transcript = transcript(publicKey, encapsulation);
 			Session session = new Session(
-				packet -> client.send(PacketRegistry.write(packet)),
-				() -> PacketRegistry.readExpected(client.receive(), PacketRegistry.BinaryMessagePacket.class),
+				packet -> wrap(packet, p -> client.send(PacketRegistry.write(p))),
+				() -> wrap(() -> PacketRegistry.readExpected(client.receive(), PacketRegistry.BinaryMessagePacket.class)),
 				derive(enc.key(), transcript, "c2s"),
 				derive(enc.key(), transcript, "s2c")
 			);
@@ -155,6 +193,7 @@ public class PQKE {
 			} catch (Exception e) {
 				LOGGER.error(marker, "Failed to verify PQKE session with server {}: {}", client.remoteEndpoint(), e.getMessage(), e);
 				session.close();
+				ThreadContext.remove("pqke");
 				throw e;
 			}
 		} catch (NetworkConnectionException | GeneralSecurityException e) {
@@ -163,6 +202,8 @@ public class PQKE {
 			throw e;
 		}
 	}
+	
+	public record PendingHandshake(@NotNull KeyPair keyPair, byte @NotNull [] publicKey) {}
 	
 	public static class Session implements AutoCloseable {
 		
@@ -240,199 +281,4 @@ public class PQKE {
 			} catch (Exception _) {}
 		}
 	}
-	
-	/*public static class KemSession implements AutoCloseable {
-		
-		private static final int MAX_FRAME = 1 << 20;
-		private static final int MAX_BLOB = 1 << 16;
-		
-		private final Socket socket;
-		private final DataInputStream in;
-		private final DataOutputStream out;
-		private final SecretKey sendKey;
-		private final SecretKey recvKey;
-		
-		private long sendSeq;
-		private long recvSeq;
-		private boolean broken;
-		
-		private KemSession(Socket socket, DataInputStream in, DataOutputStream out, SecretKey sendKey, SecretKey recvKey) {
-			this.socket = socket;
-			this.in = in;
-			this.out = out;
-			this.sendKey = sendKey;
-			this.recvKey = recvKey;
-		}
-		
-		// ---------- handshake ----------
-		
-		public static KemSession accept(Socket socket, KeyPair kp) throws IOException, GeneralSecurityException {
-			
-			DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-			DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-			
-			byte[] ek = kp.getPublic().getEncoded();
-			writeBlob(out, ek);
-			
-			byte[] ct = readBlob(in);
-			SecretKey shared = KEM.getInstance(KEM_ALG)
-				.newDecapsulator(kp.getPrivate())
-				.decapsulate(ct);
-			
-			return new KemSession(socket, in, out, derive(shared, ek, ct, "s2c"), derive(shared, ek, ct, "c2s"));
-		}
-		
-		public static KemSession connect(Socket socket) throws IOException, GeneralSecurityException {
-			
-			DataInputStream in = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
-			DataOutputStream out = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
-			
-			byte[] ek = readBlob(in);
-			PublicKey peer = KeyFactory.getInstance(KEM_ALG).generatePublic(new X509EncodedKeySpec(ek));
-			
-			KEM.Encapsulated enc = KEM.getInstance(KEM_ALG)
-				.newEncapsulator(peer)
-				.encapsulate();
-			
-			byte[] ct = enc.encapsulation();
-			writeBlob(out, ct);
-			
-			return new KemSession(socket, in, out, derive(enc.key(), ek, ct, "c2s"), derive(enc.key(), ek, ct, "s2c"));
-		}
-		
-		// ---------- record layer ----------
-		
-		public void send(byte[] plaintext) throws IOException, GeneralSecurityException {
-			this.checkUsable();
-			Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-			c.init(Cipher.ENCRYPT_MODE, this.sendKey, new GCMParameterSpec(TAG_BITS, nonce(this.sendSeq)));
-			byte[] sealed = c.doFinal(plaintext);
-			this.sendSeq++;
-			
-			this.out.writeInt(sealed.length);
-			this.out.write(sealed);
-			this.out.flush();
-		}
-		
-		public void send(String text) throws IOException, GeneralSecurityException {
-			this.send(text.getBytes(UTF_8));
-		}
-		
-		public byte[] receive() throws IOException, GeneralSecurityException {
-			this.checkUsable();
-			int len = this.in.readInt();
-			if (len < TAG_BYTES || len > MAX_FRAME) {
-				this.broken = true;
-				throw new IOException("invalid frame length: " + len);
-			}
-			byte[] sealed = new byte[len];
-			this.in.readFully(sealed);
-			
-			Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-			c.init(Cipher.DECRYPT_MODE, this.recvKey, new GCMParameterSpec(TAG_BITS, nonce(this.recvSeq)));
-			try {
-				byte[] plaintext = c.doFinal(sealed);
-				this.recvSeq++;
-				return plaintext;
-			} catch (AEADBadTagException e) {
-				this.broken = true;
-				throw e;
-			}
-		}
-		
-		public String receiveString() throws IOException, GeneralSecurityException {
-			return new String(this.receive(), UTF_8);
-		}
-		
-		@Override
-		public void close() throws IOException {
-			this.socket.close();
-		}
-		
-		// ---------- internals ----------
-		
-		private void checkUsable() throws IOException {
-			if (this.broken) {
-				throw new IOException("session is broken");
-			}
-			if (this.socket.isClosed()) {
-				throw new IOException("session is closed");
-			}
-		}
-		
-		private static byte[] nonce(long seq) {
-			return ByteBuffer.allocate(NONCE_LEN).putInt(0).putLong(seq).array();
-		}
-		
-		private static SecretKey derive(SecretKey shared, byte[] ek, byte[] ct, String label) throws GeneralSecurityException {
-			byte[] transcript = ByteBuffer.allocate(ek.length + ct.length).put(ek).put(ct).array();
-			
-			return KDF.getInstance("HKDF-SHA256").deriveKey("AES",
-				HKDFParameterSpec.ofExtract()
-					.addIKM(shared)
-					.addSalt(transcript)
-					.thenExpand(label.getBytes(UTF_8), 32));
-		}
-		
-		private static void writeBlob(DataOutputStream out, byte[] b) throws IOException {
-			out.writeInt(b.length);
-			out.write(b);
-			out.flush();
-		}
-		
-		private static byte[] readBlob(DataInputStream in) throws IOException {
-			int n = in.readInt();
-			if (n < 0 || n > MAX_BLOB) throw new IOException("invalid blob length: " + n);
-			byte[] b = new byte[n];
-			in.readFully(b);
-			return b;
-		}
-	}
-	
-	public static final class KemServer {
-		
-		public static void main(String[] args) throws Exception {
-			KeyPairGenerator kpg = KeyPairGenerator.getInstance("ML-KEM");
-			kpg.initialize(NamedParameterSpec.ML_KEM_768);
-			KeyPair kp = kpg.generateKeyPair();
-			
-			try (ServerSocket server = new ServerSocket(9443)) {
-				while (true) {
-					Socket client = server.accept();
-					Thread.ofVirtual().start(() -> handle(client, kp));
-				}
-			}
-		}
-		
-		private static void handle(Socket socket, KeyPair kp) {
-			try (KemSession session = KemSession.accept(socket, kp)) {
-				while (true) {
-					String request;
-					try {
-						request = session.receiveString();
-					} catch (EOFException e) {
-						return;
-					}
-					session.send("echo: " + request);
-				}
-			} catch (Exception e) {
-				System.err.println("session ended: " + e);
-			}
-		}
-	}
-	
-	public static final class KemClient {
-		
-		public static void main(String[] args) throws Exception {
-			try (Socket socket = new Socket("localhost", 9443);
-			     KemSession session = KemSession.connect(socket)) {
-				
-				session.send("hello");
-				System.out.println(session.receiveString());
-				
-				session.send("second message");
-				System.out.println(session.receiveString());
-			}
-		}
-	}*/
 }

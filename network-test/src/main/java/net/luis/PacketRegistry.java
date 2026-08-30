@@ -21,15 +21,17 @@ package net.luis;
 import net.luis.utils.io.codec.*;
 import net.luis.utils.io.codec.constraint.core.LengthConstraint;
 import net.luis.utils.io.codec.encoder.EncoderException;
-import net.luis.utils.io.codec.provider.ToonTypeProvider;
-import net.luis.utils.io.codec.types.struct.UnitCodec;
-import net.luis.utils.io.data.toon.*;
-import net.luis.utils.io.data.toon.exception.ToonSyntaxException;
+import net.luis.utils.io.codec.provider.BinaryTypeProvider;
+import net.luis.utils.io.data.InputProvider;
+import net.luis.utils.io.data.OutputProvider;
+import net.luis.utils.io.data.binary.*;
+import net.luis.utils.io.data.binary.exception.BinarySyntaxException;
 import org.jetbrains.annotations.NotNull;
 import org.jspecify.annotations.NonNull;
 
 import java.io.*;
-import java.util.*;
+import java.util.List;
+import java.util.UUID;
 
 /**
  *
@@ -38,6 +40,106 @@ import java.util.*;
  */
 
 public class PacketRegistry {
+	
+	private static final List<Class<? extends Packet>> PACKETS = List.of(
+		// PQKE Packets
+		PQKEInitializationPacket.class,
+		PQKEPublicKeyPacket.class,
+		PQKEEncapsulationPacket.class,
+		PQKEAbortPacket.class,
+		// General Packets
+		ClientConnectPacket.class,
+		HelloClientPacket.class,
+		MessagePacket.class,
+		BinaryMessagePacket.class,
+		ClientDisconnectPacket.class,
+		ByeClientPacket.class
+	);
+	private static final List<Codec<? extends Packet>> CODECS = List.of(
+		// PQKE Packets
+		PQKEInitializationPacket.CODEC,
+		PQKEPublicKeyPacket.CODEC,
+		PQKEEncapsulationPacket.CODEC,
+		PQKEAbortPacket.CODEC,
+		// General Packets
+		ClientConnectPacket.CODEC,
+		HelloClientPacket.CODEC,
+		MessagePacket.CODEC,
+		BinaryMessagePacket.CODEC,
+		ClientDisconnectPacket.CODEC,
+		ByeClientPacket.CODEC
+	);
+	
+	@SuppressWarnings("unchecked")
+	private static <T extends Packet> @NotNull BinaryElement encode(@NonNull Codec<T> codec, @NonNull Packet packet) throws EncoderException {
+		return codec.encode(BinaryTypeProvider.COMPACT, (T) packet);
+	}
+	
+	public static byte @NonNull [] write(@NonNull Packet packet) {
+		int packetIndex = PACKETS.indexOf(packet.getClass());
+		if (packetIndex == -1) {
+			throw new RuntimeException("Packet class not registered: " + packet.getClass().getName());
+		}
+		
+		Codec<? extends Packet> codec = CODECS.get(packetIndex);
+		if (codec == null) {
+			throw new RuntimeException("Codec not registered for packet class: " + packet.getClass().getName());
+		}
+		
+		try (ByteArrayOutputStream os = new ByteArrayOutputStream(); DataOutputStream stream = new DataOutputStream(os)) {
+			stream.writeInt(packetIndex);
+			
+			BinaryElement element;
+			try {
+				element = encode(codec, packet);
+			} catch (EncoderException e) {
+				throw new RuntimeException("Failed to encode packet: " + packet.getClass().getName(), e);
+			}
+			
+			try (BinaryWriter writer = new BinaryWriter(new OutputProvider(stream), BinaryConfig.COMPRESSED)) {
+				writer.writeBinary(element);
+			} catch (Exception e) {
+				throw new RuntimeException("Failed to write packet data to stream", e);
+			}
+			stream.flush();
+			return os.toByteArray();
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to write packet data", e);
+		}
+	}
+	
+	public static @NonNull Packet read(byte @NonNull [] bytes) {
+		try (DataInputStream stream = new DataInputStream(new ByteArrayInputStream(bytes))) {
+			int packetIndex = stream.readInt();
+			if (packetIndex < 0 || packetIndex >= PACKETS.size()) {
+				throw new RuntimeException("Invalid packet index: " + packetIndex);
+			}
+			
+			Codec<? extends Packet> codec = CODECS.get(packetIndex);
+			if (codec == null) {
+				throw new RuntimeException("Codec not find registered for packet index: " + packetIndex);
+			}
+			
+			try (BinaryReader reader = new BinaryReader(new InputProvider(stream), BinaryConfig.COMPRESSED)) {
+				BinaryElement element = reader.readBinary();
+				return codec.decode(BinaryTypeProvider.COMPACT, element);
+			} catch (BinarySyntaxException e) {
+				throw new RuntimeException("Failed to read packet data from stream", e);
+			}
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to read packet data", e);
+		}
+	}
+	
+	@SuppressWarnings("unchecked")
+	public static <T extends Packet> @NotNull T readExpected(byte @NonNull [] bytes, @NonNull Class<T> expectedClass) {
+		Packet packet = read(bytes);
+		if (expectedClass.isInstance(packet)) {
+			return (T) packet;
+		} else {
+			throw new RuntimeException("Unexpected packet type received: " + packet.getClass().getSimpleName() + ", expected: " + expectedClass.getSimpleName());
+		}
+	}
 	
 	public interface Packet {}
 	
@@ -50,10 +152,10 @@ public class PacketRegistry {
 		public static final Codec<PQKEInitializationPacket> CODEC = Codecs.unit(PQKEInitializationPacket::new);
 	}
 	
-	public record PQKEPublicKeyPacket(byte @NonNull [] publicKey) implements ClientToServerPacket {
+	public record PQKEPublicKeyPacket(byte @NonNull [] publicKey) implements ServerToClientPacket {
 		
 		public static final Codec<PQKEPublicKeyPacket> CODEC = CodecBuilder.of(
-			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1206)).fieldOf("publicKey", "key",PQKEPublicKeyPacket::publicKey)
+			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1206)).fieldOf("publicKey", "key", PQKEPublicKeyPacket::publicKey)
 		).create(PQKEPublicKeyPacket::new);
 	}
 	
@@ -64,13 +166,18 @@ public class PacketRegistry {
 		).create(PQKEEncapsulationPacket::new);
 	}
 	
+	public record PQKEAbortPacket() implements ClientToServerPacket { // ToDo
+		
+		public static final Codec<PQKEAbortPacket> CODEC = Codecs.unit(PQKEAbortPacket::new);
+	}
+	
 	public record ClientConnectPacket(@NonNull UUID clientId) implements ClientToServerPacket {
 		
 		public static final Codec<ClientConnectPacket> CODEC = CodecBuilder.of(
 			Codecs.UUID.version(b -> b.in(List.of(0, 4))).fieldOf("clientId", "id", ClientConnectPacket::clientId)
 		).create(ClientConnectPacket::new);
 	}
-	
+
 	public record HelloClientPacket() implements ServerToClientPacket {
 		
 		public static final Codec<HelloClientPacket> CODEC = Codecs.unit(HelloClientPacket::new);
@@ -90,10 +197,9 @@ public class PacketRegistry {
 		).create(BinaryMessagePacket::new);
 	}
 	
-	public record ClientDisconnectPacket(@NonNull UUID clientId, boolean serverConfirmation) implements ClientToServerPacket {
+	public record ClientDisconnectPacket(boolean serverConfirmation) implements ClientToServerPacket {
 		
 		public static final Codec<ClientDisconnectPacket> CODEC = CodecBuilder.of(
-			Codecs.UUID.version(b -> b.in(List.of(0, 4))).fieldOf("clientId", "id", ClientDisconnectPacket::clientId),
 			Codecs.BOOLEAN.fieldOf("serverConfirmation", "confirmation", ClientDisconnectPacket::serverConfirmation)
 		).create(ClientDisconnectPacket::new);
 	}
@@ -101,110 +207,5 @@ public class PacketRegistry {
 	public record ByeClientPacket() implements ServerToClientPacket {
 		
 		public static final Codec<ByeClientPacket> CODEC = Codecs.unit(ByeClientPacket::new);
-	}
-	
-	private static final List<Class<? extends Packet>> PACKETS = List.of(
-		// PQKE Packets
-		PQKEInitializationPacket.class,
-		PQKEPublicKeyPacket.class,
-		PQKEEncapsulationPacket.class,
-		// General Packets
-		ClientConnectPacket.class,
-		HelloClientPacket.class,
-		MessagePacket.class,
-		BinaryMessagePacket.class,
-		ClientDisconnectPacket.class,
-		ByeClientPacket.class
-	);
-	private static final List<Codec<? extends Packet>> CODECS = List.of(
-		// PQKE Packets
-		PQKEInitializationPacket.CODEC,
-		PQKEPublicKeyPacket.CODEC,
-		PQKEEncapsulationPacket.CODEC,
-		// General Packets
-		ClientConnectPacket.CODEC,
-		HelloClientPacket.CODEC,
-		MessagePacket.CODEC,
-		BinaryMessagePacket.CODEC,
-		ClientDisconnectPacket.CODEC,
-		ByeClientPacket.CODEC
-	);
-	
-	@SuppressWarnings("unchecked")
-	private static <T extends Packet> @NotNull ToonElement encode(@NonNull Codec<T> codec, @NonNull Packet packet) throws EncoderException {
-		return codec.encode(ToonTypeProvider.INSTANCE, (T) packet);
-	}
-	
-	public static byte @NonNull [] write(@NonNull Packet packet) {
-		int packetIndex = PACKETS.indexOf(packet.getClass());
-		if (packetIndex == -1) {
-			throw new RuntimeException("Packet class not registered: " + packet.getClass().getName());
-		}
-		
-		Codec<? extends Packet> codec = CODECS.get(packetIndex);
-		if (codec == null) {
-			throw new RuntimeException("Codec not registered for packet class: " + packet.getClass().getName());
-		}
-		
-		try (ByteArrayOutputStream os = new ByteArrayOutputStream(); ObjectOutputStream stream = new ObjectOutputStream(os)) {
-			stream.writeInt(packetIndex);
-			
-			if (codec instanceof UnitCodec<? extends Packet>) {
-				stream.writeBoolean(true);
-				stream.flush();
-				return os.toByteArray();
-			}
-			
-			try {
-				ToonElement element = encode(codec, packet);
-				
-				stream.writeBoolean(false);
-				stream.writeUTF(element.toString(ToonConfig.COMPACT));
-				stream.flush();
-				return os.toByteArray();
-			} catch (EncoderException e) {
-				throw new RuntimeException("Failed to encode packet: " + packet.getClass().getName(), e);
-			}
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to write packet data", e);
-		}
-	}
-	
-	public static @NonNull Packet read(byte @NonNull [] bytes) {
-		try (ObjectInputStream stream = new ObjectInputStream(new ByteArrayInputStream(bytes))) {
-			int packetIndex = stream.readInt();
-			if (packetIndex < 0 || packetIndex >= PACKETS.size()) {
-				throw new RuntimeException("Invalid packet index: " + packetIndex);
-			}
-			
-			Codec<? extends Packet> codec = CODECS.get(packetIndex);
-			if (codec == null) {
-				throw new RuntimeException("Codec not find registered for packet index: " + packetIndex);
-			}
-			
-			if (stream.readBoolean()) {
-				return codec.decode(ToonTypeProvider.INSTANCE, ToonNull.INSTANCE);
-			}
-			
-			String value = stream.readUTF();
-			try (ToonReader reader = new ToonReader(value, ToonConfig.COMPACT)) {
-				ToonElement element = reader.readToon();
-				return codec.decode(ToonTypeProvider.INSTANCE, element);
-			} catch (ToonSyntaxException e) {
-				throw new RuntimeException("Failed to read packet data: " + value, e);
-			}
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to read packet data", e);
-		}
-	}
-	
-	@SuppressWarnings("unchecked")
-	public static <T extends Packet> @NotNull T readExpected(byte @NonNull [] bytes, @NonNull Class<T> expectedClass) {
-		Packet packet = read(bytes);
-		if (expectedClass.isInstance(packet)) {
-			return (T) packet;
-		} else {
-			throw new RuntimeException("Unexpected packet type received: " + packet.getClass().getSimpleName() + ", expected: " + expectedClass.getSimpleName());
-		}
 	}
 }

@@ -41,10 +41,9 @@ import java.util.concurrent.CountDownLatch;
 
 public class Server {
 	
+	private static final Map<TcpConnection, UUID> clients = Maps.newConcurrentMap();
 	public static final Logger LOGGER = LogManager.getLogger(Server.class);
 	public static final Marker SERVER = MarkerManager.getMarker("Server");
-	
-	private static final Map<TcpConnection, UUID> clients = Maps.newConcurrentMap();
 	
 	public static void run(@NonNull IpEndpoint endpoint) {
 		TcpServerConfig config = TcpServerConfig.builder()
@@ -94,31 +93,35 @@ public class Server {
 				clients.put(connection, clientId);
 				
 				connection.send(PacketRegistry.write(new PacketRegistry.HelloClientPacket()));
-			} else if (packet instanceof PacketRegistry.PQKEInitializationPacket) {
+			} else {
 				UUID clientId = clients.get(connection);
 				ThreadContext.put("client.id", clientId != null ? clientId.toString() : "unknown");
 				
-				try (PQKE.Session session = PQKE.exchangeServer(connection, SERVER)) {
-					PacketRegistry.MessagePacket messagePacket = PacketRegistry.readExpected(session.receive(), PacketRegistry.MessagePacket.class);
-					LOGGER.info(SERVER, "Received MessagePacket from clientId {}: {}", clientId, messagePacket.message());
+				if (packet instanceof PacketRegistry.PQKEInitializationPacket) {
+					PQKE.beginServerExchange(connection, SERVER);
+				} else if (packet instanceof PacketRegistry.PQKEEncapsulationPacket(byte[] encapsulation)) {
+					try (PQKE.Session session = PQKE.completeServerExchange(connection, encapsulation, SERVER)) {
+						PacketRegistry.MessagePacket messagePacket = PacketRegistry.readExpected(session.receive(), PacketRegistry.MessagePacket.class);
+						LOGGER.info(SERVER, "Received MessagePacket from clientId {}: {}", clientId, messagePacket.message());
+						
+						session.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Encrypted hello from server!")));
+					}
+				} else if (packet instanceof PacketRegistry.MessagePacket(String message)) {
+					LOGGER.info(SERVER, "Received MessagePacket with message: {}", message);
+					connection.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Hello from server!")));
+				} else if (packet instanceof PacketRegistry.ClientDisconnectPacket(boolean serverConfirmation)) {
+					LOGGER.info(SERVER, "Received ClientDisconnectPacket from clientId: {}, serverConfirmation: {}", clientId, serverConfirmation);
+					clients.remove(connection);
 					
-					session.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Encrypted hello from server!")));
-				} finally {
-					ThreadContext.remove("client.id");
-				}
-			} else if (packet instanceof PacketRegistry.MessagePacket(String message)) {
-				LOGGER.info(SERVER, "Received MessagePacket with message: {}", message);
-				connection.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Hello from server!")));
-			} else if (packet instanceof PacketRegistry.ClientDisconnectPacket(UUID clientId, boolean serverConfirmation)) {
-				LOGGER.info(SERVER, "Received ClientDisconnectPacket from clientId: {}, serverConfirmation: {}", clientId, serverConfirmation);
-				clients.remove(connection);
-				
-				if (serverConfirmation) {
-					connection.send(PacketRegistry.write(new PacketRegistry.ByeClientPacket()));
+					if (serverConfirmation) {
+						connection.send(PacketRegistry.write(new PacketRegistry.ByeClientPacket()));
+					}
 				}
 			}
 		} catch (Exception e) {
 			LOGGER.error(SERVER, "Error sending response to {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
+		} finally {
+			ThreadContext.remove("client.id");
 		}
 	}
 	
