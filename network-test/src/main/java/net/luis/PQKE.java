@@ -18,6 +18,11 @@
 
 package net.luis;
 
+import net.luis.utils.crypto.*;
+import net.luis.utils.crypto.algorithm.*;
+import net.luis.utils.crypto.exception.CryptoException;
+import net.luis.utils.crypto.key.Secret;
+import net.luis.utils.crypto.util.CryptoBytes;
 import net.luis.utils.function.throwable.ThrowableConsumer;
 import net.luis.utils.function.throwable.ThrowableSupplier;
 import net.luis.utils.io.network.connection.exception.NetworkConnectionException;
@@ -25,13 +30,10 @@ import net.luis.utils.io.network.connection.tcp.TcpClient;
 import net.luis.utils.io.network.connection.tcp.TcpConnection;
 import org.apache.logging.log4j.*;
 import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
-import javax.crypto.*;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.HKDFParameterSpec;
-import java.nio.ByteBuffer;
+import javax.crypto.SecretKey;
 import java.security.*;
-import java.security.spec.X509EncodedKeySpec;
 
 import static java.nio.charset.StandardCharsets.*;
 
@@ -45,28 +47,27 @@ public class PQKE {
 	
 	private static final Logger LOGGER = LogManager.getLogger(PQKE.class);
 	
-	private static final String KEM_ALG = "ML-KEM-768";
+	private static final KemAlgorithm KEM_ALG = KemAlgorithm.ML_KEM_768;
 	private static final int TAG_BITS = 128;
 	private static final int NONCE_LEN = 12;
 	
 	private static byte @NotNull [] transcript(byte @NotNull [] publicKey, byte @NotNull [] encapsulation) {
-		return ByteBuffer.allocate(publicKey.length + encapsulation.length).put(publicKey).put(encapsulation).array();
+		return CryptoBytes.concat(publicKey, encapsulation);
 	}
 	
-	private static @NotNull SecretKey derive(@NotNull SecretKey shared, byte @NotNull [] transcript, @NotNull String label) throws GeneralSecurityException {
-		return KDF.getInstance("HKDF-SHA256").deriveKey(
-			"AES", HKDFParameterSpec.ofExtract().addIKM(shared).addSalt(transcript).thenExpand(label.getBytes(UTF_8), 32)
-		);
+	private static @NonNull SecretKey derive(@NonNull Secret shared, byte @NonNull [] transcript, @NonNull String label) {
+		return Kdf.deriveKey(KdfAlgorithm.HKDF_SHA_256, shared.material(), transcript, label.getBytes(UTF_8), AeadAlgorithm.AES_256_GCM);
 	}
 	
-	private static byte @NotNull [] finished(@NotNull SecretKey shared, byte @NotNull [] transcript, @NotNull String label) throws GeneralSecurityException {
-		Mac mac = Mac.getInstance("HmacSHA256");
-		mac.init(derive(shared, transcript, label + "-finished"));
-		return mac.doFinal(transcript);
+	private static byte @NonNull [] finished(@NonNull Secret shared, byte @NonNull [] transcript, @NonNull String label) {
+		byte[] info = (label + "-finished").getBytes(UTF_8);
+		try (Secret key = Kdf.derive(KdfAlgorithm.HKDF_SHA_256, shared.material(), transcript, info, MacAlgorithm.HMAC_SHA_256.recommendedKeyLength())) {
+			return Macs.mac(MacAlgorithm.HMAC_SHA_256, key.material(), transcript);
+		}
 	}
 	
 	private static byte @NotNull [] nonce(long seq) {
-		return ByteBuffer.allocate(NONCE_LEN).putInt(0).putLong(seq).array();
+		return CryptoBytes.concat(CryptoBytes.of(0), CryptoBytes.of(seq));
 	}
 	
 	private static void wrap(PacketRegistry.@NotNull BinaryMessagePacket packet, @NotNull ThrowableConsumer<PacketRegistry.BinaryMessagePacket, NetworkConnectionException> supplier) throws NetworkConnectionException {
@@ -96,14 +97,14 @@ public class PQKE {
 		
 		LOGGER.info(marker, "Initializing PQKE handshake with client...");
 		try {
-			KeyPair kp = KeyPairGenerator.getInstance(KEM_ALG).generateKeyPair();
+			KeyPair kp = Kems.generateKeyPair(KEM_ALG);
 			byte[] publicKey = kp.getPublic().getEncoded();
 			
 			connection.send(PacketRegistry.write(new PacketRegistry.PQKEPublicKeyPacket(publicKey)));
 			LOGGER.info(marker, "Sent PQKE public key to client");
 			
 			connection.context().set("pqke", new PendingHandshake(kp, publicKey));
-		} catch (NetworkConnectionException | GeneralSecurityException e) {
+		} catch (NetworkConnectionException | CryptoException e) {
 			LOGGER.error(marker, "Failed to establish PQKE session with client {}: {}", connection.remoteEndpoint(), e.getMessage(), e);
 		} finally {
 			ThreadContext.remove("pqke");
@@ -118,9 +119,7 @@ public class PQKE {
 		
 		PendingHandshake pending = connection.context().get("pqke", PendingHandshake.class).orElseThrow();
 		try {
-			SecretKey shared = KEM.getInstance(KEM_ALG)
-				.newDecapsulator(pending.keyPair.getPrivate())
-				.decapsulate(encapsulation);
+			Secret shared = Kems.decapsulate(KEM_ALG, pending.keyPair.getPrivate(), encapsulation);
 			
 			LOGGER.info(marker, "PQKE session established with client: {}", connection.remoteEndpoint());
 			byte[] transcript = transcript(pending.publicKey, encapsulation);
@@ -163,40 +162,41 @@ public class PQKE {
 			
 			PacketRegistry.PQKEPublicKeyPacket publicKeyPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.PQKEPublicKeyPacket.class);
 			byte[] publicKey = publicKeyPacket.publicKey();
-			PublicKey peer = KeyFactory.getInstance(KEM_ALG).generatePublic(new X509EncodedKeySpec(publicKey));
+			
+			PublicKey peer = CryptoKeys.publicKey(KEM_ALG, publicKey);
 			LOGGER.info(marker, "Received PQKE public key from server");
 			
-			KEM.Encapsulated enc = KEM.getInstance(KEM_ALG)
-				.newEncapsulator(peer)
-				.encapsulate();
-			byte[] encapsulation = enc.encapsulation();
-			
-			client.send(PacketRegistry.write(new PacketRegistry.PQKEEncapsulationPacket(encapsulation)));
-			
-			LOGGER.info(marker, "Established PQKE session with server: {}", client.remoteEndpoint());
-			byte[] transcript = transcript(publicKey, encapsulation);
-			Session session = new Session(
-				packet -> wrap(packet, p -> client.send(PacketRegistry.write(p))),
-				() -> wrap(() -> PacketRegistry.readExpected(client.receive(), PacketRegistry.BinaryMessagePacket.class)),
-				derive(enc.key(), transcript, "c2s"),
-				derive(enc.key(), transcript, "s2c")
-			);
-			
-			try {
-				if (!MessageDigest.isEqual(session.receive(), finished(enc.key(), transcript, "s2c"))) {
-					throw new SecurityException("Server key confirmation failed");
-				}
-				session.send(finished(enc.key(), transcript, "c2s"));
+			try (Kems.Encapsulation enc = Kems.encapsulate(KEM_ALG, peer)) {
+				byte[] encapsulation = enc.encapsulation();
+				Secret shared = enc.sharedSecret();
 				
-				LOGGER.info(marker, "PQKE session established and verified with server: {}", client.remoteEndpoint());
-				return session;
-			} catch (Exception e) {
-				LOGGER.error(marker, "Failed to verify PQKE session with server {}: {}", client.remoteEndpoint(), e.getMessage(), e);
-				session.close();
-				ThreadContext.remove("pqke");
-				throw e;
+				client.send(PacketRegistry.write(new PacketRegistry.PQKEEncapsulationPacket(encapsulation)));
+				
+				LOGGER.info(marker, "Established PQKE session with server: {}", client.remoteEndpoint());
+				byte[] transcript = transcript(publicKey, encapsulation);
+				Session session = new Session(
+					packet -> wrap(packet, p -> client.send(PacketRegistry.write(p))),
+					() -> wrap(() -> PacketRegistry.readExpected(client.receive(), PacketRegistry.BinaryMessagePacket.class)),
+					derive(shared, transcript, "c2s"),
+					derive(shared, transcript, "s2c")
+				);
+				
+				try {
+					if (!MessageDigest.isEqual(session.receive(), finished(shared, transcript, "s2c"))) {
+						throw new SecurityException("Server key confirmation failed");
+					}
+					session.send(finished(shared, transcript, "c2s"));
+					
+					LOGGER.info(marker, "PQKE session established and verified with server: {}", client.remoteEndpoint());
+					return session;
+				} catch (Exception e) {
+					LOGGER.error(marker, "Failed to verify PQKE session with server {}: {}", client.remoteEndpoint(), e.getMessage(), e);
+					session.close();
+					ThreadContext.remove("pqke");
+					throw e;
+				}
 			}
-		} catch (NetworkConnectionException | GeneralSecurityException e) {
+		} catch (NetworkConnectionException e) {
 			LOGGER.error(marker, "Failed to establish PQKE session with server {}: {}", client.remoteEndpoint(), e.getMessage(), e);
 			ThreadContext.remove("pqke");
 			throw e;
@@ -236,13 +236,10 @@ public class PQKE {
 		public void send(byte @NotNull [] plaintext) throws Exception {
 			this.checkUsable();
 			
-			Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-			c.init(Cipher.ENCRYPT_MODE, this.sendKey, new GCMParameterSpec(TAG_BITS, nonce(this.sendSeq)));
-			byte[] sealed = c.doFinal(plaintext);
-			
+			byte[] sealed = Aead.encrypt(AeadAlgorithm.AES_256_GCM, this.sendKey, nonce(this.sendSeq), plaintext, null);
 			try {
 				this.send.accept(new PacketRegistry.BinaryMessagePacket(sealed));
-			} catch (Exception e) {
+			} catch (CryptoException e) {
 				LOGGER.error("Failed to send encrypted message: {}", e.getMessage(), e);
 				this.broken = true;
 				throw e;
@@ -253,14 +250,11 @@ public class PQKE {
 		public byte @NotNull [] receive() throws Exception {
 			this.checkUsable();
 			
-			Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
-			c.init(Cipher.DECRYPT_MODE, this.recvKey, new GCMParameterSpec(TAG_BITS, nonce(this.recvSeq)));
-			
 			try {
-				byte[] plaintext = c.doFinal(this.receive.get().message());
+				byte[] plaintext = Aead.decrypt(AeadAlgorithm.AES_256_GCM, this.recvKey, nonce(this.recvSeq), this.receive.get().message(), null);
 				this.recvSeq++;
 				return plaintext;
-			} catch (Exception e) {
+			} catch (CryptoException e) {
 				LOGGER.error("Failed to receive encrypted message: {}", e.getMessage(), e);
 				this.broken = true;
 				throw e;
