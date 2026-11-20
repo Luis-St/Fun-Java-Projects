@@ -1,13 +1,13 @@
 pluginManagement {
 	plugins {
-		id("net.luis.lm") version "1.1.0"
+		id("net.luis.lm") version "1.2.1"
 	}
 	
 	repositories {
 		gradlePluginPortal()
 		mavenCentral()
 		maven {
-			url = uri("https://maven.luis-st.net/plugins/")
+			url = uri("https://artifact.luis-st.net/maven/plugins/")
 		}
 	}
 }

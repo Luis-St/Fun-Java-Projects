@@ -25,7 +25,7 @@ plugins {
 repositories {
 	mavenCentral()
 	maven {
-		url = uri("https://maven.luis-st.net/libraries/")
+		url = uri("https://artifact.luis-st.net/maven/libraries/")
 	}
 }
 
