@@ -116,3 +116,14 @@ tasks.register<JavaExec>("spawnClient") {
 	)
 }
 
+tasks.register<JavaExec>("generateSignature") {
+	group = "runs"
+	mainClass.set("net.luis.Main")
+	classpath = sourceSets["main"].runtimeClasspath
+	enableAssertions = true
+	standardInput = System.`in`
+	args = listOf(
+		"--generate-signature",
+		"-Dlog4j2.configurationFile=${sourceSets["main"].output.resourcesDir}/log4j2.json",
+	)
+}

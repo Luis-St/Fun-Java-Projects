@@ -20,29 +20,30 @@ public class Main {
 	
 	void main(String @NonNull [] args) {
 		if (args.length == 0) {
-			LOGGER.error("No arguments provided. Please specify '--server' or '--client <clientId>'.");
+			LOGGER.error("No arguments provided. Please specify '--server', '--client <clientId>' or '--generate-signature'.");
 			return;
 		}
 		
 		String mode = args[0];
-		if ("--server".equals(mode)) {
-			Server.run(DEFAULT_ENDPOINT);
-		} else if ("--client".equals(mode)) {
-			if (args.length < 2) {
-				LOGGER.error("No client id provided. Please specify a client id after '--client'.");
-				return;
-			}
-			
-			try {
-				UUID clientId = UUID.fromString(args[1]);
-				ThreadContext.put("client.id", clientId.toString());
+		switch (mode) {
+			case "--generate-signature" -> Shared.generateSignature();
+			case "--server" -> Server.run(DEFAULT_ENDPOINT);
+			case "--client" -> {
+				if (args.length < 2) {
+					LOGGER.error("No client id provided. Please specify a client id after '--client'.");
+					return;
+				}
 				
-				Client.run(clientId, DEFAULT_ENDPOINT);
-			} catch (IllegalArgumentException e) {
-				LOGGER.error("Invalid client id format. Please provide a valid uuid.");
+				try {
+					UUID clientId = UUID.fromString(args[1]);
+					ThreadContext.put("client.id", clientId.toString());
+					
+					Client.run(clientId, DEFAULT_ENDPOINT);
+				} catch (IllegalArgumentException e) {
+					LOGGER.error("Invalid client id format. Please provide a valid uuid.");
+				}
 			}
-		} else {
-			LOGGER.error("Invalid argument: {}. Please specify '--server' or '--client <clientId>'.", mode);
+			case null, default -> LOGGER.error("Invalid argument: {}. Please specify '--server', '--client <clientId>' or '--generate-signature'.", mode);
 		}
 	}
 }

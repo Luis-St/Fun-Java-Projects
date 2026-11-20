@@ -26,7 +26,7 @@ import net.luis.utils.io.data.InputProvider;
 import net.luis.utils.io.data.OutputProvider;
 import net.luis.utils.io.data.binary.*;
 import net.luis.utils.io.data.binary.exception.BinarySyntaxException;
-import org.jetbrains.annotations.NotNull;
+import net.luis.utils.util.Either;
 import org.jspecify.annotations.NonNull;
 
 import java.io.*;
@@ -71,7 +71,7 @@ public class PacketRegistry {
 	);
 	
 	@SuppressWarnings("unchecked")
-	private static <T extends Packet> @NotNull BinaryElement encode(@NonNull Codec<T> codec, @NonNull Packet packet) throws EncoderException {
+	private static <T extends Packet> @NonNull BinaryElement encode(@NonNull Codec<T> codec, @NonNull Packet packet) throws EncoderException {
 		return codec.encode(BinaryTypeProvider.COMPACT, (T) packet);
 	}
 	
@@ -131,13 +131,19 @@ public class PacketRegistry {
 		}
 	}
 	
+	public static <P extends Packet> @NonNull P readPacket(byte @NonNull [] bytes, @NonNull Class<P> packetClass) {
+		return readRequest(bytes, PacketRequest.of(packetClass)).leftOrThrow();
+	}
+	
 	@SuppressWarnings("unchecked")
-	public static <T extends Packet> @NotNull T readExpected(byte @NonNull [] bytes, @NonNull Class<T> expectedClass) {
+	public static <P extends Packet, E extends Packet> @NonNull Either<P, E> readRequest(byte @NonNull [] bytes, @NonNull PacketRequest<P, E> request) {
 		Packet packet = read(bytes);
-		if (expectedClass.isInstance(packet)) {
-			return (T) packet;
+		if (request.packetClass().isInstance(packet)) {
+			return Either.left((P) packet);
+		} else if (request.hasError() && request.errorPacket().orElseThrow().isInstance(packet)) {
+			return Either.right((E) packet);
 		} else {
-			throw new RuntimeException("Unexpected packet type received: " + packet.getClass().getSimpleName() + ", expected: " + expectedClass.getSimpleName());
+			throw new IllegalStateException("Unexpected packet type received: " + packet.getClass().getSimpleName() + ", expected: " + request);
 		}
 	}
 	
@@ -152,10 +158,11 @@ public class PacketRegistry {
 		public static final Codec<PQKEInitializationPacket> CODEC = Codecs.unit(PQKEInitializationPacket::new);
 	}
 	
-	public record PQKEPublicKeyPacket(byte @NonNull [] publicKey) implements ServerToClientPacket {
+	public record PQKEPublicKeyPacket(byte @NonNull [] publicKey, byte @NonNull [] signature) implements ServerToClientPacket {
 		
 		public static final Codec<PQKEPublicKeyPacket> CODEC = CodecBuilder.of(
-			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1206)).fieldOf("publicKey", "key", PQKEPublicKeyPacket::publicKey)
+			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(1206)).fieldOf("publicKey", "key", PQKEPublicKeyPacket::publicKey),
+			Codecs.BYTE_ARRAY.length(builder -> builder.equalTo(3309)).fieldOf("signature", "sig", PQKEPublicKeyPacket::signature)
 		).create(PQKEPublicKeyPacket::new);
 	}
 	
@@ -166,7 +173,7 @@ public class PacketRegistry {
 		).create(PQKEEncapsulationPacket::new);
 	}
 	
-	public record PQKEAbortPacket() implements ClientToServerPacket { // ToDo
+	public record PQKEAbortPacket() implements Packet {
 		
 		public static final Codec<PQKEAbortPacket> CODEC = Codecs.unit(PQKEAbortPacket::new);
 	}
@@ -177,13 +184,13 @@ public class PacketRegistry {
 			Codecs.UUID.version(b -> b.in(List.of(0, 4))).fieldOf("clientId", "id", ClientConnectPacket::clientId)
 		).create(ClientConnectPacket::new);
 	}
-
+	
 	public record HelloClientPacket() implements ServerToClientPacket {
 		
 		public static final Codec<HelloClientPacket> CODEC = Codecs.unit(HelloClientPacket::new);
 	}
 	
-	public record MessagePacket(@NotNull String message) implements Packet {
+	public record MessagePacket(@NonNull String message) implements Packet {
 		
 		public static final Codec<MessagePacket> CODEC = CodecBuilder.of(
 			Codecs.STRING.length(LengthConstraint::notEmpty).fieldOf("message", "msg", MessagePacket::message)

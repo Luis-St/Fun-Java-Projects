@@ -19,15 +19,20 @@
 package net.luis;
 
 import com.google.common.collect.Maps;
+import net.luis.pqke.PQKESession;
+import net.luis.utils.crypto.CryptoKeys;
+import net.luis.utils.crypto.Pems;
 import net.luis.utils.io.network.Endpoint;
 import net.luis.utils.io.network.IpEndpoint;
 import net.luis.utils.io.network.connection.Connection;
 import net.luis.utils.io.network.connection.exception.NetworkErrorType;
 import net.luis.utils.io.network.connection.tcp.*;
+import net.luis.utils.util.UUIDs;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
+import java.security.PrivateKey;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -94,14 +99,12 @@ public class Server {
 				
 				connection.send(PacketRegistry.write(new PacketRegistry.HelloClientPacket()));
 			} else {
-				UUID clientId = clients.get(connection);
-				ThreadContext.put("client.id", clientId != null ? clientId.toString() : "unknown");
+				UUID clientId = clients.getOrDefault(connection, UUIDs.MAX);
+				ThreadContext.put("client.id", clientId.equals(UUIDs.MAX) ? "unknown" : clientId.toString());
 				
 				if (packet instanceof PacketRegistry.PQKEInitializationPacket) {
-					PQKE.beginServerExchange(connection, SERVER);
-				} else if (packet instanceof PacketRegistry.PQKEEncapsulationPacket(byte[] encapsulation)) {
-					try (PQKE.Session session = PQKE.completeServerExchange(connection, encapsulation, SERVER)) {
-						PacketRegistry.MessagePacket messagePacket = PacketRegistry.readExpected(session.receive(), PacketRegistry.MessagePacket.class);
+					try (PQKESession session = PQKESession.startServerSession(SERVER, connection, clientId, Shared.loadPrivateKey())) {
+						PacketRegistry.MessagePacket messagePacket = PacketRegistry.readPacket(session.receive(), PacketRegistry.MessagePacket.class);
 						LOGGER.info(SERVER, "Received MessagePacket from clientId {}: {}", clientId, messagePacket.message());
 						
 						session.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Encrypted hello from server!")));

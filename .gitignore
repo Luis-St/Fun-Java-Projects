@@ -37,3 +37,7 @@ replay_pid*
 
 # logs
 *.log
+
+# Tests
+/network-test/src/main/resources/network-test/private_key.pem
+/network-test/src/main/resources/network-test/public_key.pem

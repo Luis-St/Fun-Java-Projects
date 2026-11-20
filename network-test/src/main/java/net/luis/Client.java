@@ -18,9 +18,11 @@
 
 package net.luis;
 
+import net.luis.pqke.PQKESession;
 import net.luis.utils.io.network.IpEndpoint;
 import net.luis.utils.io.network.connection.tcp.TcpClient;
 import net.luis.utils.io.network.connection.tcp.TcpClientConfig;
+import net.luis.utils.util.Either;
 import org.apache.logging.log4j.*;
 import org.jspecify.annotations.NonNull;
 
@@ -48,24 +50,24 @@ public class Client {
 			
 			client.send(PacketRegistry.write(new PacketRegistry.ClientConnectPacket(clientId)));
 			
-			PacketRegistry.HelloClientPacket helloClientPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.HelloClientPacket.class);
+			PacketRegistry.HelloClientPacket helloClientPacket = PacketRegistry.readPacket(client.receive(), PacketRegistry.HelloClientPacket.class);
 			LOGGER.info(CLIENT, "Received hello packet from server.");
 			
-			try (PQKE.Session session = PQKE.exchangeClient(client, CLIENT)) {
+			try (PQKESession session = PQKESession.startClientSession(CLIENT, client, Shared.loadPublicKey())) {
 				session.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Encrypted hello from client " + clientId + "!")));
 				
-				PacketRegistry.MessagePacket messageResponse = PacketRegistry.readExpected(session.receive(), PacketRegistry.MessagePacket.class);
+				PacketRegistry.MessagePacket messageResponse = PacketRegistry.readPacket(session.receive(), PacketRegistry.MessagePacket.class);
 				LOGGER.info(CLIENT, "Received message from server: {}", messageResponse.message());
 			}
 			
 			client.send(PacketRegistry.write(new PacketRegistry.MessagePacket("Unencrypted hello from client " + clientId + "!")));
 			
-			PacketRegistry.MessagePacket messageResponse = PacketRegistry.readExpected(client.receive(), PacketRegistry.MessagePacket.class);
+			PacketRegistry.MessagePacket messageResponse = PacketRegistry.readPacket(client.receive(), PacketRegistry.MessagePacket.class);
 			LOGGER.info(CLIENT, "Received message from server: {}", messageResponse.message());
 			
 			client.send(PacketRegistry.write(new PacketRegistry.ClientDisconnectPacket(CONFIRMATION)));
 			if (CONFIRMATION) {
-				PacketRegistry.ByeClientPacket byeClientPacket = PacketRegistry.readExpected(client.receive(), PacketRegistry.ByeClientPacket.class);
+				PacketRegistry.ByeClientPacket byeClientPacket = PacketRegistry.readPacket(client.receive(), PacketRegistry.ByeClientPacket.class);
 				LOGGER.info(CLIENT, "Received bye packet from server.");
 			}
 			
